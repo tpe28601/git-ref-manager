@@ -1,0 +1,542 @@
+/* Git Ref Manager — 樣式建立在 ui-kit 3.0 token 上（深淺色、強調色由 tb-theme.js 控制）。
+   下列短名稱只是 --tb-* 的別名，方便沿用既有規則。 */
+:root {
+  --bg: var(--tb-bg);
+  --bg2: var(--tb-surface);
+  --bg3: var(--tb-surface-2);
+  --fg: var(--tb-text);
+  --muted: var(--tb-muted);
+  --line: var(--tb-border);
+  --accent: var(--tb-accent);
+  --accent-fg: var(--tb-accent-fg);
+  --ok: var(--tb-ok);
+  --warn: var(--tb-warn);
+  --err: var(--tb-danger);
+  --sb: var(--tb-scroll);
+  --sb-hover: var(--tb-border-strong);
+  --mono: var(--tb-mono);
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--tb-font);
+  font-size: 14px;
+  /* App Shell：body 不捲動、捲動發生在 main，
+     頁面捲動條因此停在 Job 面板上緣，不會伸進 log 區域 */
+  display: flex; flex-direction: column; overflow: hidden;
+}
+
+.topbar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 18px; background: var(--bg2); border-bottom: 1px solid var(--line);
+  flex: none;
+}
+.brand { font-weight: 700; font-size: 16px; }
+.top-right { display: flex; gap: 8px; align-items: center; }
+
+.badge {
+  display: inline-block; padding: 2px 10px; border-radius: 10px;
+  font-size: 12px; background: var(--bg3); color: var(--muted); border: 1px solid var(--line);
+}
+.badge.ok { color: var(--ok); border-color: var(--ok); }
+.badge.err { color: var(--err); border-color: var(--err); }
+.badge.busy { color: var(--warn); border-color: var(--warn); }
+
+.icon-btn {
+  background: none; border: 1px solid var(--line); color: var(--fg);
+  border-radius: 6px; padding: 4px 9px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.icon-btn:hover { border-color: var(--accent); }
+
+.ic {
+  flex: none;
+  vertical-align: -2px;
+  width: 15px;
+  height: 15px;
+  /* 內嵌 Lucide SVG：一律以線條描繪、跟隨文字顏色（HTML 內嵌者無 stroke 屬性，靠這裡補齊） */
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.btn .ic { margin-right: 2px; }
+.repo-summary .ok .ic, .repo-summary .bad .ic { color: inherit; }
+
+.tabs { display: flex; gap: 6px; padding: 10px 18px; flex: none; }
+/* 完整邊框＋四角圓角：不再做「與內容融合」的破口頁籤樣式 */
+.tab-btn {
+  background: var(--bg2); color: var(--muted); border: 1px solid var(--line);
+  border-radius: 8px; padding: 8px 20px; cursor: pointer;
+}
+.tab-btn.active { color: var(--fg); background: var(--bg3); border-color: var(--accent); }
+/* 「設定檔」鈕與分頁鈕同形同色（它是彈出面板開關，不能套 tab-btn class，會被分頁切換邏輯收合） */
+.tabs #profile-open {
+  background: var(--bg2); color: var(--muted); border: 1px solid var(--line);
+  border-radius: 8px; padding: 8px 20px; font-size: 14px;
+}
+.tabs #profile-open:hover { color: var(--fg); }
+/* 功能說明鈕併入 tabs 同列右側，只顯示目前分頁的那顆（body[data-tab] 由 app.js 設定） */
+.tabs .tabs-spacer { flex: 1; }
+.tabs .help-btn { display: none; align-self: center; }
+body[data-tab="sync"] .help-sync,
+body[data-tab="fetch"] .help-fetch,
+body[data-tab="worktree"] .help-worktree { display: inline-flex; }
+
+main { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 10px 18px 16px; }
+.tab { display: none; }
+.tab.active { display: block; }
+
+.repo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 12px; }
+@media (max-width: 800px) { .repo-grid { grid-template-columns: 1fr; } }
+.field label { display: block; color: var(--muted); margin-bottom: 4px; }
+.input-row { display: flex; gap: 6px; position: relative; }
+/* 驗證燈：嵌在路徑框右內緣並與邊框留出間隔（input 為 flex:1，燈採 absolute 不影響版面） */
+.input-row input[type="text"], .dst-row input[type="text"] { padding-right: 36px; }
+.vb {
+  position: absolute; top: 50%; transform: translateY(-50%); right: 48px;
+  width: 18px; height: 18px; padding: 0; border: none; background: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--muted); border-radius: 4px;
+}
+.vb.ok { color: var(--ok); cursor: pointer; }
+.vb.bad { color: var(--err); }
+.vb.busy { color: var(--accent); }
+.vb .spin { animation: vb-spin 1s linear infinite; }
+@keyframes vb-spin { to { transform: rotate(360deg); } }
+/* 目的 Repo 列：刪除鈕是資料夾按鈕上的角標（不佔列寬），燈與來源列同一基準；
+   summary 折行會拉高列，故燈鎖 input 行高內（top 定值而非 50%） */
+.dst-row { position: relative; }
+.dst-row .vb { right: 48px; top: 8px; transform: none; }
+/* 刪除角標：疊在資料夾按鈕右上角，錨在列右緣（＝按鈕右緣）向外微突，
+   絕對定位不影響版面；燈與 input 不受影響 */
+.dst-del {
+  position: absolute; right: -3px; top: -2px; z-index: 2;
+  width: 16px; height: 16px; min-width: 0; padding: 0; border-radius: 50%;
+  background: var(--bg3); border: 1px solid var(--line); color: var(--muted);
+  display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.dst-del .ic { width: 9px; height: 9px; vertical-align: 0; }
+.dst-del:hover { color: var(--err); border-color: var(--err); }
+input[type="text"] {
+  flex: 1; background: var(--bg2); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px;
+  font-family: var(--mono); font-size: 13px;
+}
+input[type="text"]:focus { outline: none; border-color: var(--accent); }
+
+.repo-summary { margin-top: 5px; font-size: 12px; color: var(--muted); font-family: var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.repo-summary .ok { color: var(--ok); }
+.repo-summary .bad { color: var(--err); }
+.repo-summary .warn { display: inline-flex; align-items: center; gap: 5px; margin-top: 2px;
+  color: var(--warn); line-height: 1.5; }
+.repo-summary .warn .ic { width: 13px; height: 13px; flex: none; color: var(--warn); }
+
+.opts { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 14px; }
+.chk { display: flex; gap: 8px; align-items: center; cursor: pointer; }
+.warn-text { color: var(--warn); }
+
+.actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+/* ---- 設定檔：分頁列按鈕＋彈出面板＋ toast ---- */
+.profile-pop {
+  position: fixed; z-index: 80; width: 288px; display: flex; flex-direction: column; gap: 9px;
+  background: var(--bg2); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+}
+.profile-pop-title { color: var(--muted); font-size: 12px; }
+.profile-pop .profile-select { width: 100%; }
+.profile-pop-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+#profile-open.active { color: var(--accent); border-color: var(--accent); }
+.profile-toast {
+  position: fixed; left: 16px; bottom: 16px; z-index: 90; max-width: 60vw;
+  background: var(--bg2); color: var(--fg); border: 1px solid var(--line); border-radius: 8px;
+  padding: 8px 14px; font-size: 13px; box-shadow: 0 8px 22px rgba(0, 0, 0, 0.3);
+}
+.profile-select {
+  background: var(--bg2); color: var(--fg); border: 1px solid var(--line);
+  border-radius: 6px; padding: 6px 8px; font-size: 13px;
+}
+.profile-select:focus { outline: none; border-color: var(--accent); }
+.profile-hint { color: var(--muted); font-size: 12px; }
+
+/* ---- 請求排隊提示（任一同源 API 超過 1.2 秒未回） ---- */
+#slow-hint {
+  position: fixed; top: 52px; left: 50%; transform: translateX(-50%); z-index: 120;
+  background: var(--bg3); border: 1px solid var(--warn); color: var(--warn);
+  border-radius: 999px; padding: 4px 16px; font-size: 12px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35); pointer-events: none;
+}
+.btn {
+  border-radius: 6px; padding: 8px 18px; cursor: pointer; border: 1px solid transparent;
+  font-size: 14px;
+}
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn.primary { background: var(--accent); color: var(--accent-fg); }
+.btn.secondary { background: var(--bg2); color: var(--fg); border-color: var(--line); }
+.btn.danger { background: var(--err); color: #fff; }
+.btn.small { padding: 4px 10px; font-size: 12px; }
+
+.panel { margin-top: 16px; background: var(--bg2); border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+/* 保留版面空間的隱藏（.hidden 是 display:none，會讓 flex 列內元素跳位） */
+.ghost { visibility: hidden; pointer-events: none; }
+.hidden { display: none !important; }
+
+.totals { font-weight: 600; margin-bottom: 8px; }
+.totals-row { display: flex; align-items: center; gap: 10px; }
+.totals-row .totals { flex: 1; }
+
+.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tbl th, .tbl td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.tbl th { color: var(--muted); font-weight: 600; }
+.tbl .num { text-align: right; width: 70px; }
+.tbl .conf { font-family: var(--mono); font-size: 12px; color: var(--warn); }
+
+.checklist, .warnlist { list-style: none; padding: 0; margin: 0 0 8px 0; }
+.checklist li { padding: 3px 0; font-family: var(--mono); font-size: 13px; display: flex; gap: 6px; align-items: baseline; }
+.checklist li.ok .ic { color: var(--ok); }
+.checklist li.bad .ic { color: var(--err); }
+.warnlist li { color: var(--warn); font-size: 13px; padding: 2px 0; display: flex; gap: 6px; align-items: baseline; }
+.warnlist li .ic { color: var(--warn); }
+.repo-summary .bad .ic, .repo-summary .ok .ic { vertical-align: -2px; }
+
+.confirm-bar {
+  margin-top: 14px; padding: 10px 14px; border: 1px solid var(--warn);
+  border-radius: 8px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+}
+
+/* ---- Job 面板（正常流，置於 main 之下；見 body App Shell） ---- */
+.job-panel {
+  flex: none;
+  background: var(--bg2); border-top: 1px solid var(--line);
+}
+.job-head { display: flex; align-items: center; gap: 12px; padding: 8px 18px; cursor: pointer; }
+.job-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); flex: none; }
+.job-head progress { flex: 1; height: 6px; accent-color: var(--accent); }
+/* height（非 max-height）：拖拉一定能看到面板變化，即使 Log 很少或為空；
+   min-height：即使沒有 Log 也有可拖拉的高度（搭配下方「暫無內容」佔位） */
+.job-body { height: var(--job-h, min(260px, 38vh)); max-height: 80vh; min-height: 70px; overflow: auto; padding: 0 18px 10px; }
+.job-panel.collapsed .job-body, .job-panel.collapsed .job-resizer { display: none; }
+#job-log:empty::before { content: '暫無內容'; color: var(--muted); font-style: italic; }
+/* 空 Log：佔位文字水平＋垂直置中（job-body 為固定高度容器） */
+#job-log:empty { min-height: 100%; display: flex; align-items: center; justify-content: center; }
+/* 手把在面板最頂端（標題列之上），拖拉即拉伸整個面板；
+   不另畫 border-bottom，避免與 panel border-top 形成雙線 */
+.job-resizer {
+  height: 6px; cursor: ns-resize; background: transparent; touch-action: none;
+}
+.job-resizer::after {
+  content: ''; display: block; height: 3px; margin: 0 40%;
+  background: transparent; border-radius: 2px;
+}
+.job-resizer:hover::after, .job-resizer.dragging::after { background: var(--accent); }
+body.resizing { cursor: ns-resize; user-select: none; }
+.log {
+  font-family: var(--mono); font-size: 12px; line-height: 1.55;
+  white-space: pre-wrap; word-break: break-all; margin: 0; color: var(--fg);
+}
+.result {
+  margin-top: 8px; padding: 8px 12px; border-radius: 6px;
+  background: var(--bg3); font-family: var(--mono); font-size: 12px;
+  white-space: pre-wrap; word-break: break-all;
+}
+
+/* ---- 資料夾瀏覽器 ---- */
+.modal {
+  position: fixed; inset: 0; background: rgba(0,0,0,.55);
+  display: flex; align-items: center; justify-content: center; z-index: 100;
+}
+.modal-box {
+  width: min(680px, 92vw); max-height: 80vh; display: flex; flex-direction: column;
+  background: var(--bg2); border: 1px solid var(--line); border-radius: 10px;
+}
+.modal-head, .modal-foot {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 14px; border-bottom: 1px solid var(--line);
+}
+.modal-foot { border-bottom: none; border-top: 1px solid var(--line); justify-content: flex-end; }
+.fm-toolbar { display: flex; gap: 8px; align-items: center; padding: 8px 14px; flex-wrap: wrap; }
+.fm-current { font-family: var(--mono); font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 120px; }
+.fm-list { overflow: auto; min-height: 200px; max-height: 46vh; padding: 0 6px; }
+.fm-item {
+  display: flex; gap: 8px; align-items: center; padding: 6px 10px;
+  border-radius: 6px; cursor: pointer; font-family: var(--mono); font-size: 13px;
+}
+.fm-item:hover { background: var(--bg3); }
+.fm-item .git-tag { color: var(--ok); font-size: 11px; border: 1px solid var(--ok); border-radius: 4px; padding: 0 5px; }
+.fm-item.repo-pick { color: var(--accent); }
+.fm-empty { color: var(--muted); padding: 14px; text-align: center; }
+
+/* ---- 分頁功能說明（說明鈕在 tabs 同列） ---- */
+.help-box { width: min(720px, 94vw); }
+.help-body { overflow: auto; padding: 12px 18px; max-height: 60vh; }
+.help-body h4 { margin: 0 0 8px; }
+.help-body ul { margin: 0; padding-left: 20px; }
+.help-body li { margin: 6px 0; line-height: 1.65; }
+.help-body code { font-family: var(--mono); font-size: 12px; background: var(--bg3); padding: 1px 5px; border-radius: 4px; }
+
+/* ---- 預覽表格：橫向捲動殼＋明細展開 ---- */
+.tbl-wrap { overflow-x: auto; }
+.tbl .col-detail { width: 60px; text-align: center; }
+.detail-btn { padding: 2px 7px; }
+.tbl tr.detail-row td { background: var(--bg3); padding: 8px 12px; }
+.conf-detail { margin: 0; font-family: var(--mono); font-size: 12px; color: var(--warn); white-space: pre-wrap; word-break: break-all; }
+.muted { color: var(--muted); }
+
+/* ---- Submodule 勾選清單 ---- */
+.subs-details { margin: 4px 0 12px; background: var(--bg2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
+.subs-details summary { cursor: pointer; color: var(--muted); }
+/* 全選／清空＋計數工具列（放在展開內容首列，避免點按鈕誤觸 summary 收合） */
+.subs-toolbar { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.subs-toolbar .muted { font-size: 12px; margin-left: 4px; }
+#subs-refresh { margin-left: auto; }   /* 靠右，與全選／清空（勾選操作）區隔 */
+.subs-list { display: flex; flex-direction: column; gap: 2px; margin-top: 8px; max-height: 220px; overflow: auto; }
+/* 長路徑（無空白可斷行）允許任意折行，避免撐出水平捲動條 */
+.subs-list label span { overflow-wrap: anywhere; }
+.sub-item { display: flex; gap: 6px; align-items: center; font-family: var(--mono); font-size: 12px; padding: 2px 4px; border-radius: 4px; cursor: pointer; }
+.sub-item:hover { background: var(--bg3); }
+.sub-item.disabled { color: var(--muted); cursor: not-allowed; }
+.sub-item .git-tag { font-size: 11px; border: 1px solid var(--ok); border-radius: 4px; padding: 0 5px; color: var(--ok); }
+.warn-tag { color: var(--warn) !important; border-color: var(--warn) !important; }
+/* 「從 A 初始化」：靠列右緣，間距與標籤一致 */
+.sub-init-btn { margin-left: auto; flex: none; }
+/* 全部略過時清單頂端提示 */
+.subs-skip-tip { color: var(--muted); font-size: 12px; padding: 2px 4px 6px; }
+
+/* ---- Job log 自動捲動 ---- */
+.autoscroll-chk { font-size: 12px; color: var(--muted); white-space: nowrap; cursor: pointer; }
+.job-body { position: relative; }
+.job-latest {
+  position: sticky; bottom: 6px; margin: -4px 4px 0 auto; z-index: 2;
+  background: var(--bg3); color: var(--fg); border: 1px solid var(--accent);
+  border-radius: 16px; width: 34px; height: 30px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+
+/* ---- 捲動條：全域自訂（含 body 層級），深淺主題走 --sb 變數 ---- */
+* { scrollbar-width: thin; scrollbar-color: var(--sb) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: var(--sb); border-radius: 6px; border: 2px solid transparent; background-clip: padding-box; }
+*::-webkit-scrollbar-thumb:hover { background: var(--sb-hover); }
+*::-webkit-scrollbar-corner { background: transparent; }
+
+/* ---- 多個目的 Repo ---- */
+.dst-row { display: flex; gap: 6px; align-items: stretch; flex-wrap: wrap; }
+.dst-row + .dst-row { margin-top: 6px; }
+#sync-dst-add { margin-top: 8px; }
+.dst-row .repo-summary { flex-basis: 100%; margin-top: 2px; }
+.dst-section { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-top: 10px; background: var(--bg3); }
+/* 「跳過的 Submodule」清單：獨立資訊列，與差異表格拉開明確距離 */
+.dst-section details { margin-top: 10px; background: var(--bg2); border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; }
+.dst-section details summary { cursor: pointer; color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 6px; list-style: none; }
+.dst-section details summary::-webkit-details-marker { display: none; }
+.dst-section details summary .ic { transition: transform .15s; }
+.dst-section details[open] summary .ic { transform: rotate(90deg); }
+.dst-section ul { margin: 6px 0 0; padding-left: 20px; }
+.dst-section li { font-family: var(--mono); font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.dst-summary { font-family: var(--mono); font-size: 12px; margin-bottom: 8px; }
+.dst-summary .ic { color: var(--accent); }
+.dst-summary .muted { margin-left: 8px; }
+.dst-summary .warn { margin-left: 8px; }
+/* 目的 Repo 區塊可收合：標題列即 summary（外層 details 不自帶 marker，chevron 自繪） */
+details.dst-section > .dst-summary { display: block; cursor: pointer; list-style: none; user-select: none; }
+details.dst-section > .dst-summary::-webkit-details-marker { display: none; }
+details.dst-section:not([open]) > .dst-summary { margin-bottom: 0; }
+.dst-summary .chev { display: inline-flex; vertical-align: -2px; margin-right: 4px; color: var(--muted); transition: transform .15s; }
+.dst-summary .chev .ic { color: var(--muted); }
+details.dst-section[open] > .dst-summary .chev { transform: rotate(90deg); }
+
+/* ---- 預覽面板內的執行按鈕列 ---- */
+/* ---- 預覽面板底部：forceOrigin 勾選（左）＋執行按鈕（右）同列 ---- */
+.preview-actions { margin-top: 12px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.preview-actions #sync-apply { margin-left: auto; flex: none; }
+#sync-force-origin { font-size: 13px; }
+
+/* ---- 按鈕忙碌態（轉圈＋階段文字；原全寬「計算差異中…」佔位列已移除） ---- */
+.btn .spin { animation: vb-spin 1s linear infinite; }
+.btn.busy { display: inline-flex; align-items: center; gap: 7px; }
+
+/* ---- 歷史紀錄彈窗 ---- */
+.hist-box { width: min(860px, 94vw); }
+.hist-list { overflow: auto; min-height: 160px; max-height: 56vh; padding: 4px 8px; }
+.hist-item {
+  display: grid; grid-template-columns: 52px 96px 64px 1fr; gap: 10px; align-items: center;
+  padding: 7px 10px; border-bottom: 1px solid var(--line); cursor: pointer; font-size: 12px;
+}
+.hist-item:hover { background: var(--bg3); }
+.hist-id { font-family: var(--mono); color: var(--muted); }
+.hist-kind { color: var(--fg); }
+.hist-when { font-family: var(--mono); color: var(--muted); }
+.hist-sum { font-family: var(--mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hist-badge { font-size: 11px; }
+/* 歷史唯讀模式：panel body 加邊框提示 */
+.job-body.hist-view { border-top: 2px solid var(--warn); }
+
+/* ---- 響應式 ---- */
+@media (max-width: 800px) {
+  .confirm-bar { flex-direction: column; align-items: stretch; }
+}
+@media (max-width: 560px) {
+  main { padding: 12px 10px; }
+  .tabs { padding: 8px 10px 0; flex-wrap: wrap; }
+  .tab-btn { padding: 7px 12px; font-size: 13px; }
+  .tabs #profile-open { padding: 7px 12px; font-size: 13px; }
+  .actions .btn { flex: 1 1 auto; }
+  .job-head { flex-wrap: wrap; gap: 8px; padding: 8px 10px; }
+  .job-body { padding: 0 10px 10px; }
+  .tbl th, .tbl td { padding: 5px 6px; }
+  .tbl .num { width: 52px; }
+  .modal-box, .help-box { width: 96vw; }
+}
+
+/* ---- Dev-Toolbox 嵌入模式（Hub 以 ?embedded=1 載入）---- */
+/* Hub 已提供統一頂列，隱藏工具自己的頂部列（品牌、主題切換鈕） */
+:root[data-embedded] .topbar { display: none; }
+
+/* ======================================================================
+   ui-kit 3.0 外觀（與 Hub、其他工具一致）：圓角、陰影、滑過有框、圖標小動畫
+   放在檔尾覆蓋上面的舊規則；版面結構不變。
+   ====================================================================== */
+body { transition: background var(--tb-transition), color var(--tb-transition); }
+
+/* 頂部列與分頁 */
+.topbar { background: var(--tb-surface); border-bottom: 1px solid var(--tb-border); padding: 10px 18px; }
+.brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 650; font-size: var(--tb-fs-lg); }
+.brand-logo { width: 30px; height: 30px; border-radius: var(--tb-radius); display: inline-flex; align-items: center; justify-content: center; background: var(--tb-accent-soft); color: var(--tb-accent); }
+.brand-logo .ic { width: 17px; height: 17px; }
+.tabs { gap: 4px; padding: 12px 18px 6px; align-items: center; flex-wrap: wrap; }
+.tab-btn, .tabs #profile-open {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: transparent; color: var(--tb-muted); border: 1px solid transparent;
+  border-radius: var(--tb-radius); padding: 7px 14px; font: inherit; font-weight: 500;
+  transition: background var(--tb-transition), color var(--tb-transition), border-color var(--tb-transition);
+}
+.tab-btn:hover, .tabs #profile-open:hover { color: var(--tb-text); background: var(--tb-surface); border-color: var(--tb-border); }
+.tab-btn.active { color: var(--tb-accent); background: var(--tb-accent-soft); border-color: transparent; font-weight: 600; }
+.tabs #profile-open { margin-left: 6px; box-shadow: none; min-height: 0; }
+.tabs #profile-open.active { color: var(--tb-accent); border-color: var(--tb-accent); background: var(--tb-surface); }
+
+/* 按鈕 */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: var(--tb-control-h); padding: 0 16px; border-radius: var(--tb-radius);
+  font: inherit; font-weight: 500; border: 1px solid var(--tb-border-strong);
+  background: var(--tb-surface); color: var(--tb-text); box-shadow: var(--tb-shadow-sm);
+  transition: background var(--tb-transition), border-color var(--tb-transition), box-shadow var(--tb-transition), transform var(--tb-transition);
+}
+.btn:not(:disabled):hover { border-color: var(--tb-accent); box-shadow: 0 0 0 3px var(--tb-accent-soft); }
+.btn:not(:disabled):active { transform: translateY(1px); }
+.btn:focus-visible, .icon-btn:focus-visible, .tab-btn:focus-visible { outline: none; box-shadow: var(--tb-focus); }
+.btn.primary { background: var(--tb-accent); border-color: var(--tb-accent); color: var(--tb-accent-fg); }
+.btn.primary:not(:disabled):hover { background: color-mix(in srgb, var(--tb-accent) 88%, var(--tb-text)); box-shadow: 0 0 0 3px var(--tb-accent-ring); }
+.btn.secondary { background: var(--tb-surface); color: var(--tb-text); border-color: var(--tb-border-strong); }
+.btn.danger { background: var(--tb-danger); border-color: var(--tb-danger); color: #fff; }
+.btn.danger:not(:disabled):hover { border-color: var(--tb-danger); box-shadow: 0 0 0 3px var(--tb-danger-soft); }
+.btn.small { min-height: 28px; padding: 0 10px; font-size: var(--tb-fs-sm); }
+.btn:disabled { opacity: .5; box-shadow: none; }
+.icon-btn {
+  min-width: 32px; height: 32px; padding: 0 7px; border-radius: var(--tb-radius);
+  border: 1px solid var(--tb-border); background: var(--tb-surface); color: var(--tb-text);
+  transition: border-color var(--tb-transition), box-shadow var(--tb-transition), color var(--tb-transition);
+}
+.icon-btn:hover { border-color: var(--tb-accent); color: var(--tb-accent); box-shadow: 0 0 0 3px var(--tb-accent-soft); }
+
+/* 圖標滑過動畫（ICONS 產生的 .ic 與 HTML 內嵌的 .ic 都適用） */
+.ic { width: 16px; height: 16px; vertical-align: -3px; }
+.btn:not(:disabled):hover > .ic, .icon-btn:hover > .ic, .tab-btn:hover > .ic, .tabs #profile-open:hover > .ic { animation: tb-popicon .35s ease; }
+#theme-toggle:hover > .ic, #fm-scan:hover > .ic { animation: tb-wiggle .5s ease; }
+#job-history:hover > .ic { animation: tb-spin .7s ease reverse; }
+.browse-btn:hover > .ic, #fm-up:hover > .ic { animation: tb-bounce .5s ease; }
+
+/* 輸入框 */
+input[type="text"], .profile-select {
+  min-height: var(--tb-control-h); background: var(--tb-surface); color: var(--tb-text);
+  border: 1px solid var(--tb-border-strong); border-radius: var(--tb-radius); padding: 0 10px;
+  transition: border-color var(--tb-transition), box-shadow var(--tb-transition);
+}
+input[type="text"]:hover, .profile-select:hover { border-color: color-mix(in srgb, var(--tb-accent) 55%, var(--tb-border-strong)); }
+input[type="text"]:focus, .profile-select:focus { outline: none; border-color: var(--tb-accent); box-shadow: var(--tb-focus); }
+.field label { font-size: var(--tb-fs-sm); font-weight: 500; color: var(--tb-muted); margin-bottom: 6px; }
+.chk input[type="checkbox"] { accent-color: var(--tb-accent); width: 16px; height: 16px; }
+.vb { right: 46px; }
+
+/* 卡片類容器 */
+.panel, .subs-details {
+  background: var(--tb-surface); border: 1px solid var(--tb-border); border-radius: var(--tb-radius-xl);
+  box-shadow: var(--tb-shadow-sm); padding: 14px 16px;
+}
+.subs-details { transition: border-color var(--tb-transition); }
+.subs-details:hover { border-color: var(--tb-border-strong); }
+.dst-section { background: var(--tb-surface-2); border-radius: var(--tb-radius-lg); transition: border-color var(--tb-transition), box-shadow var(--tb-transition); }
+.dst-section:hover { border-color: color-mix(in srgb, var(--tb-accent) 45%, var(--tb-border)); }
+.dst-section details { background: var(--tb-surface); }
+.confirm-bar { border-color: var(--tb-warn); background: var(--tb-warn-soft); border-radius: var(--tb-radius-lg); }
+.result { background: var(--tb-surface-2); border-radius: var(--tb-radius); }
+
+/* 徽章 */
+.badge { padding: 2px 10px; border-radius: 999px; font-size: var(--tb-fs-xs); font-weight: 600; background: var(--tb-surface-2); color: var(--tb-muted); border: 1px solid transparent; }
+.badge.ok { color: var(--tb-ok); background: var(--tb-ok-soft); border-color: transparent; }
+.badge.err { color: var(--tb-danger); background: var(--tb-danger-soft); border-color: transparent; }
+.badge.busy { color: var(--tb-warn); background: var(--tb-warn-soft); border-color: transparent; }
+
+/* 表格 */
+.tbl th { font-size: var(--tb-fs-xs); text-transform: none; letter-spacing: .02em; }
+.tbl tbody tr { transition: background var(--tb-transition); }
+.tbl tbody tr:hover > td { background: var(--tb-surface-2); }
+
+/* 清單：滑過有框 */
+.fm-item, .hist-item, .sub-item { border: 1px solid transparent; transition: background var(--tb-transition), border-color var(--tb-transition); }
+.fm-item:hover, .sub-item:not(.disabled):hover { background: var(--tb-accent-soft); border-color: var(--tb-accent-ring); }
+.hist-item { border-radius: var(--tb-radius); border-bottom-color: var(--tb-border); }
+.hist-item:hover { background: var(--tb-accent-soft); border-color: var(--tb-accent-ring); }
+
+/* 工作面板 */
+.job-panel { background: var(--tb-surface); border-top: 1px solid var(--tb-border); box-shadow: 0 -4px 16px rgba(0, 0, 0, .05); }
+.job-head { transition: background var(--tb-transition); }
+.job-head:hover { background: var(--tb-surface-2); }
+.job-head progress { appearance: none; -webkit-appearance: none; height: 6px; border: 0; border-radius: 999px; background: var(--tb-surface-3); overflow: hidden; }
+.job-head progress::-webkit-progress-bar { background: var(--tb-surface-3); border-radius: 999px; }
+.job-head progress::-webkit-progress-value { background: var(--tb-accent); border-radius: 999px; transition: width .3s ease; }
+.job-head progress::-moz-progress-bar { background: var(--tb-accent); border-radius: 999px; }
+.log { color: var(--tb-text); }
+
+/* 彈窗、浮動面板、提示 */
+.modal { background: color-mix(in srgb, #000 45%, transparent); backdrop-filter: blur(2px); animation: tb-fade .15s ease; }
+.modal-box { background: var(--tb-surface); border: 1px solid var(--tb-border); border-radius: var(--tb-radius-xl); box-shadow: var(--tb-shadow); animation: tb-pop .18s ease; overflow: hidden; }
+.modal-head { font-weight: 600; padding: 12px 16px; }
+.modal-foot { padding: 12px 16px; gap: 8px; }
+.profile-pop, .profile-toast { background: var(--tb-surface); border-color: var(--tb-border); border-radius: var(--tb-radius-lg); box-shadow: var(--tb-shadow); }
+.profile-pop { animation: tb-pop .15s ease; }
+.profile-toast { border-left: 4px solid var(--tb-accent); animation: tb-slide .18s ease; }
+#slow-hint { background: var(--tb-surface); border-color: var(--tb-warn); color: var(--tb-warn); box-shadow: var(--tb-shadow); }
+.help-body code { background: var(--tb-surface-2); }
+
+/* 嵌入 Hub 時，分頁列直接貼齊頂端 */
+:root[data-embedded] .tabs { padding-top: 10px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ic, .modal, .modal-box, .profile-pop, .profile-toast { animation: none !important; }
+}
+
+/* 分頁列：與 Opencode Cfg Manager 相同的樣式（白底橫列＋下邊線、圖標＋文字、選中為淡色底） */
+.tabs { background: var(--tb-surface); border-bottom: 1px solid var(--tb-border); padding: 8px 18px; gap: 4px; }
+.tab-btn, .tabs #profile-open {
+  min-height: 34px; padding: 0 12px; font-weight: 500; font-size: var(--tb-fs);
+  color: var(--tb-muted); background: transparent; border: 1px solid transparent; box-shadow: none;
+}
+.tab-btn:hover, .tabs #profile-open:hover { color: var(--tb-text); background: var(--tb-surface-2); border-color: var(--tb-border); box-shadow: none; }
+.tab-btn.active { color: var(--tb-accent); background: var(--tb-accent-soft); border-color: transparent; font-weight: 600; }
+.tabs #profile-open { margin-left: 0; }
+.tabs .help-btn { min-height: 30px; }
+main { padding-top: 14px; }
+:root[data-embedded] .tabs { padding-top: 8px; }
+@media (max-width: 560px) {
+  .tab-btn span { display: none; }
+  .tab-btn.active span { display: inline; }
+}

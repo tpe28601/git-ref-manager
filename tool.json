@@ -1,0 +1,14 @@
+{
+  "specVersion": 1,
+  "kind": "tool",
+  "id": "git-ref-manager",
+  "name": "Git Ref Manager",
+  "version": "1.1.1",
+  "description": "Git ref / origin / worktree 管理（含 Submodule）",
+  "runtime": { "kind": "powershell", "min": "5.1" },
+  "web": { "entry": "Git-Ref-Manager-Web.ps1", "defaultPort": 8756, "health": "/api/health" },
+  "cli": { "entry": "Git-Ref-Manager.ps1", "menu": true, "json": false },
+  "requires": ["git"],
+  "dataDir": "%LOCALAPPDATA%/DevToolbox/git-ref-manager",
+  "uiKit": "3.0.0"
+}

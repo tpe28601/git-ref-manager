@@ -1,0 +1,10 @@
+* text=auto
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.css text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+# vendored copy synced byte-for-byte from Dev-Toolbox (Sync-UiKit.ps1)
+/cli-kit.ps1 text eol=lf

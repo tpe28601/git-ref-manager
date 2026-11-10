@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f3f5f9">
+<link rel="icon" href="data:,">
+<title>Git Ref Manager</title>
+<link rel="stylesheet" href="/ui-kit.css">
+<link rel="stylesheet" href="/style.css">
+<!-- 深淺色／強調色：網址 ?theme=&accent=（Hub 嵌入時帶入）> 本機記憶 > 跟隨系統；?embedded=1 隱藏自己的頂部列 -->
+<script src="/tb-theme.js"></script>
+</head>
+<body class="tb-app" data-tab="sync">
+<header class="topbar">
+  <div class="brand"><span class="brand-logo"><svg class="ic" viewBox="0 0 24 24"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></span>Git Ref Manager</div>
+  <div class="top-right">
+    <span id="server-state" class="badge">連線中…</span>
+    <button id="theme-toggle" class="icon-btn" title="切換主題：淺色 → 深色 → 跟隨系統"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg></button>
+  </div>
+</header>
+
+<nav class="tabs">
+  <button class="tab-btn active" data-tab="sync" title="本地同步"><svg class="ic" viewBox="0 0 24 24"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg><span>本地同步</span></button>
+  <button class="tab-btn" data-tab="fetch" title="Fetch Origin"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg><span>Fetch Origin</span></button>
+  <button class="tab-btn" data-tab="worktree" title="Worktree"><svg class="ic" viewBox="0 0 24 24"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></svg><span>Worktree</span></button>
+  <button id="profile-open" class="btn secondary" type="button" title="儲存／載入常用設定（含三個分頁）"><svg class="ic" viewBox="0 0 24 24"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>設定檔</button>
+  <span class="tabs-spacer"></span>
+  <button class="btn small secondary help-btn help-sync" data-help="sync"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg> 功能說明</button>
+  <button class="btn small secondary help-btn help-fetch" data-help="fetch"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg> 功能說明</button>
+  <button class="btn small secondary help-btn help-worktree" data-help="worktree"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg> 功能說明</button>
+</nav>
+
+<!-- ============ 設定檔彈出面板（由分頁列「設定檔」按鈕開） ============ -->
+<div id="profile-pop" class="profile-pop hidden" role="dialog" aria-label="設定檔">
+  <div class="profile-pop-title">設定檔（含三個分頁的路徑、選項與 Submodule 勾選）</div>
+  <select id="profile-select" class="profile-select"><option value="">—— 選擇設定檔 ——</option></select>
+  <div class="profile-pop-btns">
+    <button id="profile-save" class="btn small secondary" type="button">儲存新設定</button>
+    <button id="profile-overwrite" class="btn small secondary" type="button" disabled>覆寫</button>
+    <button id="profile-delete" class="btn small secondary" type="button" disabled>刪除</button>
+  </div>
+  <span id="profile-hint" class="profile-hint"></span>
+</div>
+<div id="profile-toast" class="profile-toast hidden" role="status"></div>
+
+<main>
+  <!-- ============ 本地同步 ============ -->
+  <section id="tab-sync" class="tab active">
+    <div class="repo-grid">
+      <div class="field">
+        <label>Repo A（來源）</label>
+        <div class="input-row">
+          <input id="sync-src" type="text" placeholder="例：D:\MyProject">
+          <button class="icon-btn browse-btn" data-target="sync-src" title="瀏覽資料夾"><svg class="ic" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg></button>
+        </div>
+        <div id="sync-src-summary" class="repo-summary"></div>
+      </div>
+      <div class="field">
+        <label>Repo B（目的，可新增多個）</label>
+        <div id="sync-dst-rows"></div>
+        <button id="sync-dst-add" class="btn small secondary" type="button" style="margin-top:4px"><svg class="ic" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></svg> 新增目的 Repo</button>
+      </div>
+    </div>
+
+    <div class="opts">
+      <label class="chk"><input type="checkbox" id="sync-origin" checked> 同步 refs/remotes/origin/*</label>
+      <label class="chk"><input type="checkbox" id="sync-heads"> 備份本地 Branch -> refs/sync/source-heads/*</label>
+      <label class="chk"><input type="checkbox" id="sync-recurse" checked> 遞迴處理已初始化的 Submodule</label>
+    </div>
+
+    <details id="sync-subs-details" class="subs-details hidden">
+      <summary><svg class="ic" viewBox="0 0 24 24"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg> Submodule 勾選<span id="subs-sum-count" class="muted">（來源 Repo 驗證通過後出現清單；未勾選者會被略過）</span></summary>
+      <div id="subs-toolbar" class="subs-toolbar hidden">
+        <button id="subs-all" class="btn small secondary" type="button">全選</button>
+        <button id="subs-none" class="btn small secondary" type="button">清空</button>
+        <span id="subs-count" class="muted"></span>
+        <button id="subs-refresh" class="btn small secondary" type="button" title="來源與所有目的 Repo 一律重新驗證（忽略同路徑快取），更新下方清單">重新驗證</button>
+      </div>
+      <div id="sync-subs-list" class="subs-list"><span class="fm-empty">尚未驗證 Repo，無清單可顯示。</span></div>
+    </details>
+
+    <div class="actions">
+      <button id="sync-preview" class="btn secondary">預覽差異</button>
+      <button id="sync-oneclick" class="btn primary" title="自動驗證 Repo、預覽差異，確認後一次套用">一鍵同步</button>
+      <label id="sync-force-always" class="chk" title="預先同意：目的 Repo 的 origin URL 與 A 不同時仍直接執行（forceOrigin），一鍵同步不再彈窗確認"><input type="checkbox" id="sync-force-always-cb"> force（origin 不同仍執行）</label>
+    </div>
+
+    <div id="sync-preview-box" class="panel hidden">
+      <div class="totals-row">
+        <div id="sync-totals" class="totals"></div>
+        <button id="dst-collapse-all" class="btn small secondary hidden" type="button" title="收合或展開所有目的 Repo 的差異明細">全部收合</button>
+      </div>
+      <div id="sync-per-dst"></div>
+      <div class="preview-actions">
+        <label id="sync-force-origin" class="chk hidden warn-text"><input type="checkbox" id="sync-force-origin-cb"> 部分目的 Repo 的 origin URL 與 A 不同已理解，仍要執行（forceOrigin）</label>
+        <button id="sync-apply" class="btn danger" disabled>執行同步</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ Fetch Origin ============ -->
+  <section id="tab-fetch" class="tab">
+    <div class="repo-grid">
+      <div class="field">
+        <label>Repo A</label>
+        <div class="input-row">
+          <input id="fetch-a" type="text" placeholder="例：D:\MyProject">
+          <button class="icon-btn browse-btn" data-target="fetch-a" title="瀏覽資料夾"><svg class="ic" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg></button>
+        </div>
+        <div id="fetch-a-summary" class="repo-summary"></div>
+      </div>
+      <div class="field">
+        <label>Repo B（可留空＝只 Fetch A）</label>
+        <div class="input-row">
+          <input id="fetch-b" type="text" placeholder="例：D:\MyProject_2">
+          <button class="icon-btn browse-btn" data-target="fetch-b" title="瀏覽資料夾"><svg class="ic" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg></button>
+        </div>
+        <div id="fetch-b-summary" class="repo-summary"></div>
+      </div>
+    </div>
+
+    <div class="opts">
+      <label class="chk"><input type="checkbox" id="fetch-prune"> 加上 --prune（清除遠端已刪除的追蹤分支）</label>
+      <label class="chk"><input type="checkbox" id="fetch-recurse" checked> 遞迴 Fetch 已初始化的 Submodule</label>
+    </div>
+
+    <div class="actions">
+      <button id="fetch-start" class="btn primary">開始 Fetch</button>
+    </div>
+
+    <div id="fetch-confirm-bar" class="confirm-bar hidden">
+      <span>將<b>連線至 origin</b> 執行 fetch，確定？</span>
+      <button id="fetch-confirm-yes" class="btn danger">確定執行</button>
+      <button id="fetch-confirm-no" class="btn secondary">取消</button>
+    </div>
+  </section>
+
+  <!-- ============ Worktree ============ -->
+  <section id="tab-worktree" class="tab">
+    <div class="repo-grid">
+      <div class="field">
+        <label>來源 Repo</label>
+        <div class="input-row">
+          <input id="wt-source" type="text" placeholder="例：D:\MyProject_2">
+          <button class="icon-btn browse-btn" data-target="wt-source" title="瀏覽資料夾"><svg class="ic" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg></button>
+        </div>
+        <div id="wt-source-summary" class="repo-summary"></div>
+      </div>
+      <div class="field">
+        <label>上層資料夾（新 Worktree 建在這裡面）</label>
+        <div class="input-row">
+          <input id="wt-parent" type="text" placeholder="例：D:\\">
+          <button class="icon-btn browse-btn" data-target="wt-parent" data-dirs-only="1" title="瀏覽資料夾"><svg class="ic" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg></button>
+        </div>
+      </div>
+    </div>
+    <div class="repo-grid">
+      <div class="field">
+        <label>新資料夾名稱（留空＝來源名稱-worktree）</label>
+        <input id="wt-folder" type="text" placeholder="例：MyProject_2-worktree">
+      </div>
+      <div class="field">
+        <label>新 Branch 名稱（必填）</label>
+        <input id="wt-branch" type="text" placeholder="例：feature/task-001">
+      </div>
+    </div>
+    <div class="repo-grid">
+      <div class="field">
+        <label>起始 Commit / Ref（預設 HEAD）</label>
+        <input id="wt-start" type="text" placeholder="HEAD">
+      </div>
+    </div>
+
+    <div class="actions">
+      <button id="wt-check" class="btn secondary">檢查</button>
+      <button id="wt-create" class="btn primary" disabled>建立 Worktree</button>
+    </div>
+    <div id="wt-check-box" class="panel hidden">
+      <ul id="wt-check-list" class="checklist"></ul>
+      <ul id="wt-warn-list" class="warnlist"></ul>
+      <div id="wt-target-line" class="totals"></div>
+    </div>
+  </section>
+</main>
+
+<!-- ============ Job 面板 ============ -->
+<!-- 請求排隊提示：任一同源 API 超過 1.2 秒未回時顯示（app.js 控制） -->
+<div id="slow-hint" class="hidden" role="status">伺服器正處理前一個操作，排隊中…</div>
+
+<div id="job-panel" class="job-panel collapsed">
+  <div id="job-resizer" class="job-resizer" title="拖拉調整高度；雙擊還原預設"></div>
+  <div class="job-head" id="job-head">
+    <span id="job-title">工作面板</span>
+    <span id="job-state" class="badge idle">待機</span>
+    <span id="job-dot" class="job-dot hidden" title="有工作在新面板收合時結束，點標題查看"></span>
+    <progress id="job-progress" max="1" value="0"></progress>
+    <label class="chk small autoscroll-chk" title="有新 Log 時自動捲到最新"><input type="checkbox" id="job-autoscroll" checked>自動捲動</label>
+    <button id="job-live" class="btn small secondary ghost" title="返回目前工作的即時 Log">返回即時</button>
+    <button id="job-history" class="icon-btn" title="歷史紀錄"><svg class="ic" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg></button>
+    <button id="job-toggle" class="icon-btn" title="展開/收合"><svg class="ic" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></svg></button>
+  </div>
+  <div id="job-body" class="job-body">
+    <pre id="job-log" class="log"></pre>
+    <button id="job-latest" class="job-latest hidden" title="捲動到最新"><svg class="ic" viewBox="0 0 24 24"><path d="M12 17V3"/><path d="m6 11 6 6 6-6"/><path d="M19 21H5"/></svg></button>
+    <div id="job-result" class="result hidden"></div>
+  </div>
+</div>
+
+<!-- ============ 資料夾瀏覽器 ============ -->
+<div id="folder-modal" class="modal hidden">
+  <div class="modal-box">
+    <div class="modal-head">
+      <span>選擇資料夾</span>
+      <button id="fm-close" class="icon-btn" title="關閉"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+    </div>
+    <div class="fm-toolbar">
+      <button id="fm-up" class="btn small secondary"><svg class="ic" viewBox="0 0 24 24"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg> 上層</button>
+      <button id="fm-scan" class="btn small secondary"><svg class="ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg> 掃描此處 Git Repo</button>
+      <button id="fm-drives" class="btn small secondary"><svg class="ic" viewBox="0 0 24 24"><line x1="22" x2="2" y1="12" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" x2="6.01" y1="16" y2="16"/><line x1="10" x2="10.01" y1="16" y2="16"/></svg> 磁碟清單</button>
+      <span id="fm-current" class="fm-current"></span>
+    </div>
+    <div id="fm-list" class="fm-list"></div>
+    <div class="modal-foot">
+      <button id="fm-select" class="btn primary">選取這個資料夾</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 歷史紀錄 ============ -->
+<div id="hist-modal" class="modal hidden">
+  <div class="modal-box hist-box">
+    <div class="modal-head">
+      <span>歷史紀錄（保留最近 100 筆，存放於 job-history.jsonl）</span>
+      <button id="hist-close" class="icon-btn" title="關閉"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+    </div>
+    <div id="hist-list" class="hist-list"></div>
+    <div class="modal-foot">
+      <span class="muted" style="margin-right:auto">點選一筆可在下方工作面板唯讀瀏覽其 Log</span>
+      <button id="hist-refresh" class="btn small secondary">重新整理</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 功能說明 ============ -->
+<div id="help-modal" class="modal hidden">
+  <div class="modal-box help-box">
+    <div class="modal-head">
+      <span id="help-title">功能說明</span>
+      <button id="help-close" class="icon-btn" title="關閉"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+    </div>
+    <div id="help-sync" class="help-body hidden">
+      <h4>本地同步（Repo A -> Repo B）</h4>
+      <ul>
+        <li>只做<b>本地 Ref 複製</b>：不 push、不刪 ref、不動工作目錄與 HEAD。</li>
+        <li>同步範圍看勾選：<code>refs/remotes/origin/*</code>、本地 Branch（備份到 <code>refs/sync/source-heads/*</code>）、Submodule 遞迴。</li>
+        <li>兩段式：「預覽差異」-> 預覽結果內「執行同步」；改過選項要重新預覽。</li>
+        <li>預覽結果<b>預設全部收合</b>：點目的 Repo 標題列看明細，合計列有「全部收合／全部展開」。</li>
+        <li><b>一鍵同步</b>：自動補驗證＋預覽，有差異直接套用。</li>
+        <li>驗證燈：綠勾＝通過（點開看分支／origin 明細）、紅叉＝失敗；Enter＝強制重驗。</li>
+        <li><b>A 與 B 不能同路徑</b>：與來源相同會彈窗提示並擋下；目的列彼此重複路徑者標記紅旗，需刪列或改路徑。</li>
+        <li>衝突（D/F、大小寫重複）一律<b>自動略過並回報</b>，不硬覆蓋；大小寫重複每次預覽都會重現，屬正常。</li>
+        <li>A 與 B 的 origin 不同時要勾 forceOrigin 才執行；「一鍵同步」右側 force 勾選＝預先同意、不再彈窗。</li>
+        <li>Submodule 清單：來源驗證通過後出現，預設收合並顯示「已選／可處理／略過」；<b>增減或更換目的 Repo 立即以已驗證資料重組清單</b>，不會重複驗證；送出前另有輕量比對，工具外動過初始化會自動刷新。「從 A 初始化」（單一目的）以 A 的本機複製初始化 B 側，離線可用。</li>
+        <li><b>設定檔</b>（分頁列按鈕）：儲存／載入三個分頁的設定；重新開頁自動還原上次設定。</li>
+        <li><b>工作面板</b>不自動展開，看徽章：待機 -> 等待指令中 -> 進行中 -> 完成／失敗；收合時工作結束會亮小圓點。<b>進行中也能看歷史紀錄</b>（即時進度在背景更新）。</li>
+      </ul>
+    </div>
+    <div id="help-fetch" class="help-body hidden">
+      <h4>Fetch Origin</h4>
+      <ul>
+        <li>對 Repo 執行 <code>git fetch origin</code>，<b>會實際連遠端</b>，需二次確認。</li>
+        <li>B 可留空＝只 Fetch A；B 與 A 同一 Repository（Worktree）時自動略過。</li>
+        <li><code>--prune</code> 只清遠端已刪除的 <code>origin</code> 追蹤分支，不動其他本地 ref。</li>
+        <li>遞迴只 fetch <b>已初始化</b>的 Submodule；單一 Repo 失敗不影響其他 Repo。</li>
+      </ul>
+    </div>
+    <div id="help-worktree" class="help-body hidden">
+      <h4>Worktree</h4>
+      <ul>
+        <li>在上層資料夾以 <code>git worktree add</code> 建新工作目錄並簽出新 Branch（<b>名稱必填</b>）。</li>
+        <li>先「檢查」（來源是否為 Repo、目標不存在、Branch 不重複、可寫），全過才能「建立」。</li>
+        <li>含 Submodule 時<b>不會自動初始化</b>，需要請自行 <code>git submodule update --init</code>。</li>
+        <li>本工具只建立；移除請用 <code>git worktree remove</code>。</li>
+      </ul>
+    </div>
+    <div class="modal-foot">
+      <button id="help-ok" class="btn primary">了解</button>
+    </div>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>
