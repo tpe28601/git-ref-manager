@@ -2,6 +2,11 @@
 
 格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)，版本遵循 SemVer。
 
+## [1.2.1] - 2026-11-11
+
+### 新增
+- 重整續追進行中的工作：正在追蹤的 job id 記入 localStorage（`grm.watch.v1`），頁面重新載入（F5、Hub 重建 iframe 等）後自動探測該 job 狀態，仍在進行中就重新接上輪詢，log 從頭重現；工作結束或伺服器已無此 job 時自動清除記錄。
+
 ## [1.2.0] - 2026-11-11
 
 ### 新增

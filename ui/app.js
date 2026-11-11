@@ -232,11 +232,26 @@ let lastWatchedJobId = null;    // 最近一次追蹤的工作（返回即時時
 let pollGen = 0;                // poll 代數：切換追蹤/進出歷史時 ++，作廢進行中的遲到回應
 let histReqSeq = 0;             // 歷史彈窗/歷史 log 請求序，快速連點只採最新一次
 
+// 頁面重整（或 Hub 重新載入 iframe）後自動續追進行中的工作：
+// 用 localStorage 記下正在追蹤的 job id，重新啟動時探測其狀態（見檔案末尾 reattachJob）
+const WATCH_STORAGE_KEY = 'grm.watch.v1';
+function rememberWatch(jobId) {
+  try { localStorage.setItem(WATCH_STORAGE_KEY, String(jobId)); } catch (e) { }
+}
+function forgetWatch(jobId) {
+  try {
+    if (jobId == null || localStorage.getItem(WATCH_STORAGE_KEY) === String(jobId)) {
+      localStorage.removeItem(WATCH_STORAGE_KEY);
+    }
+  } catch (e) { }
+}
+
 function watchJob(jobId) {
   if (viewMode === 'hist') exitHistView();   // 新工作進來：自動退出歷史瀏覽
   pollGen++;
   currentJob = jobId;
   lastWatchedJobId = jobId;
+  rememberWatch(jobId);
   logCursor = 0;
   polling = false;
   $('job-log').textContent = '';
@@ -297,6 +312,7 @@ async function pollJob() {
 function finishJob(j) {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
   currentJob = null;
+  forgetWatch(j.id);   // 工作已結束：不再需要重整後續追
   const box = $('job-result');
   const t = resultText(j);
   if (t && viewMode === 'live') { box.textContent = t; box.classList.remove('hidden'); }
@@ -1831,4 +1847,26 @@ window.addEventListener('pagehide', function () {
       profileAutoValidate();
     }
   } catch (e) { /* 伺服器未回應：維持空表單 */ }
+})();
+
+// ---------- 重整續追 ----------
+// 載入時若記有先前追蹤中的 job，以超大 cursor 探測其狀態（伺服器會 clamp cursor，
+// 只回 state 不吐 log）：仍在進行中就重新 watchJob 續輪詢，否則清掉記錄。
+// 探測期間若使用者已啟動新工作（key 被覆寫）或原工作已結束（key 被清除），放棄續追。
+(function reattachJob() {
+  let saved = null;
+  try { saved = localStorage.getItem(WATCH_STORAGE_KEY); } catch (e) { }
+  if (!saved) return;
+  const id = parseInt(saved, 10);
+  if (!(id > 0)) { forgetWatch(); return; }
+  fetch('/api/jobs?id=' + id + '&cursor=2147483647').then(function (res) {
+    if (!res.ok) return null;              // 伺服器重啟、job 已不存在
+    return res.json();
+  }).then(function (d) {
+    let now = null;
+    try { now = localStorage.getItem(WATCH_STORAGE_KEY); } catch (e) { }
+    if (now !== String(id)) return;        // 期間已啟動別的工作：不搶佔
+    if (d && d.state === 'Running') watchJob(id);
+    else forgetWatch(id);
+  }).catch(function () { forgetWatch(id); });
 })();
