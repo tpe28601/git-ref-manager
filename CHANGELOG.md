@@ -2,6 +2,14 @@
 
 格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)，版本遵循 SemVer。
 
+## [1.2.0] - 2026-11-11
+
+### 新增
+- 分頁選擇與 Job log「自動捲動」偏好存入 localStorage，重整後維持上次狀態。
+
+### 修正
+- 「上次設定」自動記錄的 1 秒 debounce 遺失窗口：重整或關閉視窗時（pagehide）立即以 keepalive POST 補存，輸入後立刻重整也不再遺失設定。
+
 ## [1.1.1] - 2026-11-10
 
 ### 新增

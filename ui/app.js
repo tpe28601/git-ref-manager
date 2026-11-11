@@ -103,14 +103,38 @@ $('help-modal').addEventListener('click', function (ev) { if (ev.target === this
 })();
 
 // ---------- 分頁 ----------
+const TAB_STORAGE_KEY = 'grm.tab.v1';
+function activateTab(name) {
+  const btn = document.querySelector('.tab-btn[data-tab="' + name + '"]');
+  const section = $('tab-' + name);
+  if (!btn || !section) return;
+  document.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active'); });
+  document.querySelectorAll('main .tab').forEach(function (s) { s.classList.remove('active'); });
+  btn.classList.add('active');
+  section.classList.add('active');
+  document.body.dataset.tab = name;   // 控制 tabs 列右側功能說明鈕的顯示
+}
 document.querySelectorAll('.tab-btn').forEach(function (btn) {
   btn.addEventListener('click', function () {
-    document.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active'); });
-    document.querySelectorAll('main .tab').forEach(function (s) { s.classList.remove('active'); });
-    btn.classList.add('active');
-    $('tab-' + btn.dataset.tab).classList.add('active');
-    document.body.dataset.tab = btn.dataset.tab;   // 控制 tabs 列右側功能說明鈕的顯示
+    activateTab(btn.dataset.tab);
+    try { localStorage.setItem(TAB_STORAGE_KEY, btn.dataset.tab); } catch (e) { }
   });
+});
+// 重整後回到上次使用的分頁
+try {
+  const lastTab = localStorage.getItem(TAB_STORAGE_KEY);
+  if (lastTab) activateTab(lastTab);
+} catch (e) { }
+
+// ---------- Job log 自動捲動偏好（重整後保留） ----------
+const AUTOSCROLL_STORAGE_KEY = 'grm.job-autoscroll.v1';
+try {
+  if (localStorage.getItem(AUTOSCROLL_STORAGE_KEY) !== null) {
+    $('job-autoscroll').checked = localStorage.getItem(AUTOSCROLL_STORAGE_KEY) === '1';
+  }
+} catch (e) { }
+$('job-autoscroll').addEventListener('change', function () {
+  try { localStorage.setItem(AUTOSCROLL_STORAGE_KEY, this.checked ? '1' : '0'); } catch (e) { }
 });
 
 // ---------- 伺服器等狀態 ----------
@@ -1779,6 +1803,22 @@ function inProfileField(t) {
 }
 document.addEventListener('input', function (ev) { if (inProfileField(ev.target)) scheduleSaveLast(); });
 document.addEventListener('change', function (ev) { if (inProfileField(ev.target)) scheduleSaveLast(); });
+
+// 重整／關閉視窗時立即補存尚未送出的內容，消除 1 秒 debounce 的遺失窗口
+// （keepalive 讓 POST 在頁面卸載後仍能送達）
+window.addEventListener('pagehide', function () {
+  if (!saveLastTimer) return;
+  try {
+    clearTimeout(saveLastTimer);
+    saveLastTimer = null;
+    fetch('/api/profiles/last', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Toolbox-Request': '1' },
+      body: JSON.stringify({ data: collectProfileState() }),
+      keepalive: true
+    }).catch(function () { });
+  } catch (e) { }
+});
 
 (async function initProfileRestore() {
   await profilesRefresh('');

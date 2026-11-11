@@ -1,6 +1,6 @@
 # Git Ref Manager
 
-**Git Ref Manager 1.1.1** 是 Windows 上的 Git ref／origin／worktree 管理工具，附 CLI 選單與本機 Web 控制台，支援 Submodule。
+**Git Ref Manager 1.2.0** 是 Windows 上的 Git ref／origin／worktree 管理工具，附 CLI 選單與本機 Web 控制台，支援 Submodule。
 
 它主要解決一件事：**同一個專案在電腦上有好幾份 Clone，卻不想每一份都連網路 fetch 一次。** 只要其中一份（A）fetch 過，就能把 A 的 `origin/*` 離線同步到其他 Clone（B、C…），連同所有 Submodule 一起處理。
 

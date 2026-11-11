@@ -11,6 +11,7 @@ backups/
 dist/
 build/
 *.exe
+*.zip
 
 # 公司或個人專用的 gitleaks 規則（內含關鍵字，不能進 repo）
 .gitleaks.local.toml
