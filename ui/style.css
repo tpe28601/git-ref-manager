@@ -30,13 +30,26 @@ body {
   display: flex; flex-direction: column; overflow: hidden;
 }
 
-.topbar {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 10px 18px; background: var(--bg2); border-bottom: 1px solid var(--line);
-  flex: none;
+/* 頂部列與分頁 */
+.tool-topbar, .tool-tabs {
+  padding-inline: 18px;
+  background: var(--tb-surface);
+  border-bottom: 1px solid var(--tb-border);
 }
-.brand { font-weight: 700; font-size: 16px; }
-.top-right { display: flex; gap: 8px; align-items: center; }
+.tool-topbar {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  padding-block: 10px; flex: none;
+}
+.tool-topbar__brand {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-size: var(--tb-fs-lg); font-weight: 650;
+}
+.tool-topbar__controls { margin-inline-start: auto; }
+.tool-topbar__port { color: var(--tb-muted); font-size: var(--tb-fs-xs); white-space: nowrap; }
+.tool-tabs { gap: 6px; margin-bottom: 0; padding-block: 8px; }
+@media (max-width: 560px) {
+  .tool-topbar, .tool-tabs { padding-inline: 10px; }
+}
 
 .badge {
   display: inline-block; padding: 2px 10px; border-radius: 10px;
@@ -68,7 +81,7 @@ body {
 .btn .ic { margin-right: 2px; }
 .repo-summary .ok .ic, .repo-summary .bad .ic { color: inherit; }
 
-.tabs { display: flex; gap: 6px; padding: 10px 18px; flex: none; align-items: center; flex-wrap: wrap; }
+.tabs { display: flex; flex: none; align-items: center; flex-wrap: wrap; }
 /* 分頁鈕採 ui-kit .tb-tab 標準（與 Build Runner 一致）；「設定檔／功能說明」用 .tb-btn */
 /* 功能說明鈕併入 tabs 同列右側，只顯示目前分頁的那顆（body[data-tab] 由 app.js 設定） */
 .tabs .tabs-spacer { flex: 1; }
@@ -364,8 +377,6 @@ details.dst-section[open] > .dst-summary .chev { transform: rotate(90deg); }
 }
 @media (max-width: 560px) {
   main { padding: 12px 10px; }
-  .tabs { padding: 8px 10px 0; flex-wrap: wrap; }
-  .tabs .tb-tab, .tabs #profile-open { padding-inline: 10px; font-size: 13px; }
   .actions .btn { flex: 1 1 auto; }
   .job-head { flex-wrap: wrap; gap: 8px; padding: 8px 10px; }
   .job-body { padding: 0 10px 10px; }
@@ -374,22 +385,12 @@ details.dst-section[open] > .dst-summary .chev { transform: rotate(90deg); }
   .modal-box, .help-box { width: 96vw; }
 }
 
-/* ---- Dev-Toolbox 嵌入模式（Hub 以 ?embedded=1 載入）---- */
-/* Hub 已提供統一頂列，隱藏工具自己的頂部列（品牌、主題切換鈕） */
-:root[data-embedded] .topbar { display: none; }
-
 /* ======================================================================
    ui-kit 3.0 外觀（與 Hub、其他工具一致）：圓角、陰影、滑過有框、圖標小動畫
    放在檔尾覆蓋上面的舊規則；版面結構不變。
    ====================================================================== */
 body { transition: background var(--tb-transition), color var(--tb-transition); }
 
-/* 頂部列與分頁 */
-.topbar { background: var(--tb-surface); border-bottom: 1px solid var(--tb-border); padding: 10px 18px; }
-.brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 650; font-size: var(--tb-fs-lg); }
-.brand-logo { width: 30px; height: 30px; border-radius: var(--tb-radius); display: inline-flex; align-items: center; justify-content: center; background: var(--tb-accent-soft); color: var(--tb-accent); }
-.brand-logo .ic { width: 17px; height: 17px; }
-.tabs { gap: 6px; padding: 12px 18px 6px; align-items: center; flex-wrap: wrap; }
 /* 分頁／動作鈕改採 ui-kit .tb-tab／.tb-btn 標準外觀（與 Build Runner 一致） */
 .tabs #profile-open.active { color: var(--tb-accent); border-color: var(--tb-accent); background: var(--tb-accent-soft); }
 
@@ -421,7 +422,6 @@ body { transition: background var(--tb-transition), color var(--tb-transition); 
 /* 圖標滑過動畫（ICONS 產生的 .ic 與 HTML 內嵌的 .ic 都適用） */
 .ic { width: 16px; height: 16px; vertical-align: -3px; }
 .btn:not(:disabled):hover > .ic, .icon-btn:hover > .ic { animation: tb-popicon .35s ease; }
-#theme-toggle:hover > .ic { animation: tb-wiggle .5s ease; }
 #job-history:hover > .ic { animation: tb-spin .7s ease reverse; }
 .browse-btn:hover > .ic { animation: tb-bounce .5s ease; }
 
@@ -494,12 +494,4 @@ input[type="text"]:focus, .profile-select:focus { outline: none; border-color: v
   .ic, .modal, .modal-box, .profile-pop, .profile-toast { animation: none !important; }
 }
 
-/* 分頁列：與 Opencode Cfg Manager 相同的容器樣式（表面色橫列＋下邊線）；
-   按鈕外觀一律走 ui-kit .tb-tab／.tb-btn 標準，不再自訂 */
-.tabs { background: var(--tb-surface); border-bottom: 1px solid var(--tb-border); padding: 8px 18px; gap: 6px; }
 main { padding-top: 14px; }
-:root[data-embedded] .tabs { padding-top: 8px; }
-@media (max-width: 560px) {
-  .tabs .tb-tab span { display: none; }
-  .tabs .tb-tab.is-active span { display: inline; }
-}

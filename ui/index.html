@@ -14,15 +14,16 @@
 <script src="/tb-dirpicker.js"></script>
 </head>
 <body class="tb-app" data-tab="sync">
-<header class="topbar">
-  <div class="brand"><span class="brand-logo"><svg class="ic" viewBox="0 0 24 24"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></span>Git Ref Manager</div>
-  <div class="top-right">
-    <span id="server-state" class="badge">連線中…</span>
-    <button id="theme-toggle" class="icon-btn" title="切換主題：淺色 → 深色 → 跟隨系統"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg></button>
+<header class="tool-topbar tb-hide-embedded">
+  <div class="tool-topbar__brand"><span class="tb-card__icon"><i data-tb-icon="git-branch" data-size="17"></i></span>Git Ref Manager</div>
+  <div class="tb-row tb-row--end tool-topbar__controls">
+    <span id="server-port" class="tool-topbar__port">本機服務 port —</span>
+    <span id="server-state" class="tb-badge" role="status">連線中…</span>
+    <button id="theme-toggle" class="tb-btn tb-btn--icon" type="button" aria-label="切換主題"><i data-tb-icon="sun"></i></button>
   </div>
 </header>
 
-<nav class="tabs">
+<nav class="tabs tool-tabs" aria-label="Git Ref Manager 分頁">
   <button class="tb-tab is-active" data-tab="sync" title="本地同步"><i data-tb-icon="git-branch"></i><span>本地同步</span></button>
   <button class="tb-tab" data-tab="fetch" title="Fetch Origin"><i data-tb-icon="download"></i><span>Fetch Origin</span></button>
   <button class="tb-tab" data-tab="worktree" title="Worktree"><i data-tb-icon="folder-open"></i><span>Worktree</span></button>

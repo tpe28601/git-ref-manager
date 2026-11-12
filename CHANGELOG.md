@@ -2,6 +2,12 @@
 
 格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)，版本遵循 SemVer。
 
+## [Unreleased]
+
+### 變更
+
+- 頂部標題列顯示實際使用的本機服務 port，放在連線狀態左側。分頁列保留設定檔和功能說明。
+
 ## [1.2.1] - 2026-11-11
 
 ### 新增

@@ -18,9 +18,6 @@ var ICONS = (function () {
       'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + body + '</svg>';
   }
   return {
-    sun: svg('<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>'),
-    moon: svg('<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>'),
-    monitor: svg('<rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/>'),
     folder: svg('<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>'),
     folderOpen: svg('<path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/>'),
     gitBranch: svg('<line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>'),
@@ -85,20 +82,21 @@ $('help-modal').addEventListener('click', function (ev) { if (ev.target === this
 
 // ---------- 主題（ui-kit 3.0：tb-theme.js 負責套用與記憶；Hub 嵌入時由網址與 postMessage 控制） ----------
 (function initTheme() {
-  var ORDER = ['light', 'dark', 'system'];
-  var LABEL = { light: '淺色', dark: '深色', system: '跟隨系統' };
+  const btn = $('theme-toggle');
+  if (!window.TbTheme) return;
+  const LABEL = { light: '淺色', dark: '深色', system: '跟隨系統' };
+  const ICON = { light: 'sun', dark: 'moon', system: 'monitor' };
   function paint() {
-    var t = window.TbTheme ? TbTheme.get() : { mode: 'system', resolved: 'light' };
-    var icon = t.mode === 'system' ? ICONS.monitor : (t.mode === 'dark' ? ICONS.moon : ICONS.sun);
-    $('theme-toggle').innerHTML = icon;
-    $('theme-toggle').title = '主題：' + LABEL[t.mode] + '（點一下切換）';
+    const { mode } = TbTheme.get();
+    btn.innerHTML = window.TbIcons ? TbIcons.svg(ICON[mode], { anim: 'wiggle' }) : LABEL[mode];
+    btn.title = '主題：' + LABEL[mode] + '（點一下切換）';
+    btn.setAttribute('aria-label', btn.title);
   }
   paint();
   document.addEventListener('tb-theme-change', paint);
-  $('theme-toggle').addEventListener('click', function () {
-    if (!window.TbTheme) return;
-    var cur = TbTheme.get().mode;
-    TbTheme.set(ORDER[(ORDER.indexOf(cur) + 1) % ORDER.length]);
+  btn.addEventListener('click', function () {
+    const { modes } = TbTheme;
+    TbTheme.set(modes[(modes.indexOf(TbTheme.get().mode) + 1) % modes.length]);
   });
 })();
 
@@ -140,16 +138,24 @@ $('job-autoscroll').addEventListener('change', function () {
 // ---------- 伺服器等狀態 ----------
 async function pollState() {
   const badge = $('server-state');
+  let label;
+  let tone;
   try {
     const res = await fetch('/api/state');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
     const s = await res.json();
-    if (s.busy) { badge.textContent = '忙碌（Job #' + s.activeJobId + '）'; badge.className = 'badge busy'; }
-    else if (s.subInitBusy) { badge.textContent = 'Submodule 初始化中'; badge.className = 'badge busy'; }
-    else if (s.activeValidations) { badge.textContent = '連線正常（驗證 ' + s.activeValidations + ' 筆）'; badge.className = 'badge busy'; }
-    else { badge.textContent = '連線正常'; badge.className = 'badge ok'; }
+    $('server-port').textContent = '本機服務 port ' + s.port;
+    tone = 'warn';
+    if (s.busy) label = '忙碌（Job #' + s.activeJobId + '）';
+    else if (s.subInitBusy) label = 'Submodule 初始化中';
+    else if (s.activeValidations) label = '連線正常（驗證 ' + s.activeValidations + ' 筆）';
+    else { label = '連線正常'; tone = 'ok'; }
   } catch (e) {
-    badge.textContent = '伺服器未回應'; badge.className = 'badge err';
+    label = '伺服器未回應';
+    tone = 'danger';
   }
+  if (badge.textContent !== label) badge.textContent = label;
+  badge.className = 'tb-badge tb-badge--' + tone;
 }
 setInterval(pollState, 3000);
 pollState();
