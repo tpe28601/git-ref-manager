@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="/style.css">
 <!-- 深淺色／強調色：網址 ?theme=&accent=（Hub 嵌入時帶入）> 本機記憶 > 跟隨系統；?embedded=1 隱藏自己的頂部列 -->
 <script src="/tb-theme.js"></script>
+<script src="/tb-icons.js"></script>
 </head>
 <body class="tb-app" data-tab="sync">
 <header class="topbar">
@@ -21,14 +22,14 @@
 </header>
 
 <nav class="tabs">
-  <button class="tab-btn active" data-tab="sync" title="本地同步"><svg class="ic" viewBox="0 0 24 24"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg><span>本地同步</span></button>
-  <button class="tab-btn" data-tab="fetch" title="Fetch Origin"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg><span>Fetch Origin</span></button>
-  <button class="tab-btn" data-tab="worktree" title="Worktree"><svg class="ic" viewBox="0 0 24 24"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></svg><span>Worktree</span></button>
-  <button id="profile-open" class="btn secondary" type="button" title="儲存／載入常用設定（含三個分頁）"><svg class="ic" viewBox="0 0 24 24"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>設定檔</button>
+  <button class="tb-tab is-active" data-tab="sync" title="本地同步"><i data-tb-icon="git-branch"></i><span>本地同步</span></button>
+  <button class="tb-tab" data-tab="fetch" title="Fetch Origin"><i data-tb-icon="download"></i><span>Fetch Origin</span></button>
+  <button class="tb-tab" data-tab="worktree" title="Worktree"><i data-tb-icon="folder-open"></i><span>Worktree</span></button>
+  <button id="profile-open" class="tb-btn" type="button" title="儲存／載入常用設定（含三個分頁）"><i data-tb-icon="bookmark" data-anim="pop"></i>設定檔</button>
   <span class="tabs-spacer"></span>
-  <button class="btn small secondary help-btn help-sync" data-help="sync"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg> 功能說明</button>
-  <button class="btn small secondary help-btn help-fetch" data-help="fetch"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg> 功能說明</button>
-  <button class="btn small secondary help-btn help-worktree" data-help="worktree"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg> 功能說明</button>
+  <button class="tb-btn help-btn help-sync" data-help="sync"><i data-tb-icon="circle-help"></i> 功能說明</button>
+  <button class="tb-btn help-btn help-fetch" data-help="fetch"><i data-tb-icon="circle-help"></i> 功能說明</button>
+  <button class="tb-btn help-btn help-worktree" data-help="worktree"><i data-tb-icon="circle-help"></i> 功能說明</button>
 </nav>
 
 <!-- ============ 設定檔彈出面板（由分頁列「設定檔」按鈕開） ============ -->

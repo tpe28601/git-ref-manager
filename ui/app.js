@@ -105,16 +105,16 @@ $('help-modal').addEventListener('click', function (ev) { if (ev.target === this
 // ---------- 分頁 ----------
 const TAB_STORAGE_KEY = 'grm.tab.v1';
 function activateTab(name) {
-  const btn = document.querySelector('.tab-btn[data-tab="' + name + '"]');
+  const btn = document.querySelector('.tabs .tb-tab[data-tab="' + name + '"]');
   const section = $('tab-' + name);
   if (!btn || !section) return;
-  document.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active'); });
+  document.querySelectorAll('.tabs .tb-tab').forEach(function (b) { b.classList.remove('is-active'); });
   document.querySelectorAll('main .tab').forEach(function (s) { s.classList.remove('active'); });
-  btn.classList.add('active');
+  btn.classList.add('is-active');
   section.classList.add('active');
   document.body.dataset.tab = name;   // 控制 tabs 列右側功能說明鈕的顯示
 }
-document.querySelectorAll('.tab-btn').forEach(function (btn) {
+document.querySelectorAll('.tabs .tb-tab').forEach(function (btn) {
   btn.addEventListener('click', function () {
     activateTab(btn.dataset.tab);
     try { localStorage.setItem(TAB_STORAGE_KEY, btn.dataset.tab); } catch (e) { }
