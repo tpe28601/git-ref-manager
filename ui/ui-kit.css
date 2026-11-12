@@ -1,5 +1,6 @@
-/* ui-kit 3.0.0 — Dev-Toolbox 共用樣式。正本在 Dev-Toolbox/ui-kit，請勿直接修改工具內的複本。 */
-/* 搭配 tb-theme.js（深淺色／跟隨系統、強調色）與 tb-icons.js（Lucide 圖標）。示範頁：ui-kit/demo.html */
+/* ui-kit 3.1.0 — Dev-Toolbox 共用樣式。正本在 Dev-Toolbox/ui-kit，請勿直接修改工具內的複本。 */
+/* 搭配 tb-theme.js（深淺色／跟隨系統、強調色）與 tb-icons.js（Lucide 圖標）。示範頁：ui-kit/demo.html
+ * 3.1.0：.tb-btn.is-busy 的圖標由 tb-icons.js 換成 loader 圓弧，本檔只負責轉圈。 */
 
 /* ============ 1. 設計 token ============ */
 :root {
