@@ -248,16 +248,8 @@ body.resizing { cursor: ns-resize; user-select: none; }
   padding: 10px 14px; border-bottom: 1px solid var(--line);
 }
 .modal-foot { border-bottom: none; border-top: 1px solid var(--line); justify-content: flex-end; }
-.fm-toolbar { display: flex; gap: 8px; align-items: center; padding: 8px 14px; flex-wrap: wrap; }
-.fm-current { font-family: var(--mono); font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 120px; }
-.fm-list { overflow: auto; min-height: 200px; max-height: 46vh; padding: 0 6px; }
-.fm-item {
-  display: flex; gap: 8px; align-items: center; padding: 6px 10px;
-  border-radius: 6px; cursor: pointer; font-family: var(--mono); font-size: 13px;
-}
-.fm-item:hover { background: var(--bg3); }
-.fm-item .git-tag { color: var(--ok); font-size: 11px; border: 1px solid var(--ok); border-radius: 4px; padding: 0 5px; }
-.fm-item.repo-pick { color: var(--accent); }
+/* 資料夾瀏覽器已改用 ui-kit tb-dirpicker（.tb-dp-* 樣式在 ui-kit.css）；
+   fm-empty 仍給 submodule 清單等佔位文字用 */
 .fm-empty { color: var(--muted); padding: 14px; text-align: center; }
 
 /* ---- 分頁功能說明（說明鈕在 tabs 同列） ---- */
@@ -429,9 +421,9 @@ body { transition: background var(--tb-transition), color var(--tb-transition); 
 /* 圖標滑過動畫（ICONS 產生的 .ic 與 HTML 內嵌的 .ic 都適用） */
 .ic { width: 16px; height: 16px; vertical-align: -3px; }
 .btn:not(:disabled):hover > .ic, .icon-btn:hover > .ic { animation: tb-popicon .35s ease; }
-#theme-toggle:hover > .ic, #fm-scan:hover > .ic { animation: tb-wiggle .5s ease; }
+#theme-toggle:hover > .ic { animation: tb-wiggle .5s ease; }
 #job-history:hover > .ic { animation: tb-spin .7s ease reverse; }
-.browse-btn:hover > .ic, #fm-up:hover > .ic { animation: tb-bounce .5s ease; }
+.browse-btn:hover > .ic { animation: tb-bounce .5s ease; }
 
 /* 輸入框 */
 input[type="text"], .profile-select {
@@ -470,8 +462,8 @@ input[type="text"]:focus, .profile-select:focus { outline: none; border-color: v
 .tbl tbody tr:hover > td { background: var(--tb-surface-2); }
 
 /* 清單：滑過有框 */
-.fm-item, .hist-item, .sub-item { border: 1px solid transparent; transition: background var(--tb-transition), border-color var(--tb-transition); }
-.fm-item:hover, .sub-item:not(.disabled):hover { background: var(--tb-accent-soft); border-color: var(--tb-accent-ring); }
+.hist-item, .sub-item { border: 1px solid transparent; transition: background var(--tb-transition), border-color var(--tb-transition); }
+.hist-item:hover, .sub-item:not(.disabled):hover { background: var(--tb-accent-soft); border-color: var(--tb-accent-ring); }
 .hist-item { border-radius: var(--tb-radius); border-bottom-color: var(--tb-border); }
 .hist-item:hover { background: var(--tb-accent-soft); border-color: var(--tb-accent-ring); }
 

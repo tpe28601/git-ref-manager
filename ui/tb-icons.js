@@ -1,4 +1,4 @@
-/* tb-icons 3.1.0 — Dev-Toolbox 共用圖標（Lucide, ISC License, https://lucide.dev）
+﻿/* tb-icons 3.2.0 — Dev-Toolbox 共用圖標（Lucide, ISC License, https://lucide.dev）
  * 正本在 Dev-Toolbox/ui-kit，請勿直接修改工具內的複本。
  * 用法：
  *   HTML：<i data-tb-icon="folder" data-anim="bounce"></i>  → 載入後自動換成 <svg class="tb-icon">

@@ -583,6 +583,7 @@ function Get-UiFile([string]$path) {
         '/ui-kit.css' = 'ui-kit.css'
         '/tb-theme.js' = 'tb-theme.js'
         '/tb-icons.js' = 'tb-icons.js'
+        '/tb-dirpicker.js' = 'tb-dirpicker.js'
     }
     if (-not $map.ContainsKey($path)) { return $null }
     $file = Join-Path (Join-Path $PSScriptRoot 'ui') $map[$path]
@@ -594,6 +595,7 @@ function Get-UiFile([string]$path) {
         'ui-kit.css' { 'text/css; charset=utf-8' }
         'tb-theme.js' { 'application/javascript; charset=utf-8' }
         'tb-icons.js' { 'application/javascript; charset=utf-8' }
+        'tb-dirpicker.js' { 'application/javascript; charset=utf-8' }
     }
     [pscustomobject]@{ Type = $type; Bytes = [System.IO.File]::ReadAllBytes($file) }
 }
@@ -766,7 +768,10 @@ function Route-Request($req, $ctx) {
         '/api/browse' {
             $b = Read-JsonBody $req
             if ($b.scan) {
-                $r = Browse-Filesystem -Path ([string]$b.path) -Scan -Depth ([int]$b.depth) -Limit ([int]$b.limit)
+                # 缺欄位時補預設（[int]$null 會轉成 0，會把掃描打成空清單）
+                $dep = if ($b.depth) { [int]$b.depth } else { 2 }
+                $lim = if ($b.limit) { [int]$b.limit } else { 50 }
+                $r = Browse-Filesystem -Path ([string]$b.path) -Scan -Depth $dep -Limit $lim
                 Send-JsonRaw $ctx ([pscustomobject]@{ repos = @($r.repos) })
                 return
             }

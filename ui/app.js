@@ -1506,98 +1506,37 @@ $('wt-create').addEventListener('click', async function () {
   watchJob(r.json.jobId);
 });
 
-// ---------- 資料夾瀏覽器 ----------
-const fm = { path: null, parent: null, targetInput: null };
-
-function fmTargetIsDirOnly() {
-  return fm.targetInput && fm.targetInput.dataset.dirsOnly === '1';
-}
-
-async function fmLoad(path) {
-  const r = await apiPost('/api/browse', { path: path || '' });
-  if (!r.json) { $('fm-list').innerHTML = '<div class="fm-empty">' + esc(r.text || '無法讀取') + '</div>'; return; }
-  fm.path = r.json.current || null;
-  fm.parent = r.json.parent;
-  $('fm-current').textContent = r.json.current || '（選擇磁碟）';
-  $('fm-up').disabled = !r.json.parent;
-  const list = $('fm-list');
-  list.innerHTML = '';
-  if (!r.json.items || !r.json.items.length) {
-    list.innerHTML = '<div class="fm-empty">（沒有子資料夾）</div>';
-    return;
-  }
-  r.json.items.forEach(function (it) {
-    const div = document.createElement('div');
-    div.className = 'fm-item' + (it.hasGit ? ' repo-pick' : '');
-    div.innerHTML = (it.hasGit ? ICONS.folderOpen : ICONS.folder) +
-      '<span>' + esc(it.name) + '</span>' +
-      (it.hasGit ? '<span class="git-tag">GIT</span>' : '');
-    div.addEventListener('click', function () { fmLoad(it.path); });
-    div.addEventListener('dblclick', function () {
-      if (it.hasGit && !fmTargetIsDirOnly()) fmSelect(it.path);
-    });
-    list.appendChild(div);
+// ---------- 資料夾瀏覽器（ui-kit tb-dirpicker 共用元件） ----------
+function dpFetchDir(path, opts) {
+  return apiPost('/api/browse', {
+    path: path || '',
+    scan: !!opts.scan, depth: opts.depth || 2, limit: opts.limit || 50
+  }).then(function (r) {
+    if (!r.json) return { error: r.text || '無法讀取' };
+    return r.json;
   });
-  if (r.json.truncated) {
-    const d = document.createElement('div');
-    d.className = 'fm-empty';
-    d.textContent = '（項目過多，僅顯示前 500 個）';
-    list.appendChild(d);
-  }
 }
 
-function fmSelect(path) {
-  if (fm.targetInput) {
-    fm.targetInput.value = path;
-    // 選資料夾視同確認：立即觸發驗證（若該框有驗證燈）
-    if (fm.targetInput._vb) vbValidate(fm.targetInput);
-  }
-  invalidatePreview();   // 路徑可能已變（來源/目的），舊預覽一律作廢
-  $('folder-modal').classList.add('hidden');
-}
-
-function fmOpenFor(input) {
-  fm.targetInput = input;
-  let start = input.value.trim();
+function fmOpenFor(input, dirsOnly) {
+  let start = (input.value || '').trim();
   if (start) {
     // 從既有路徑的父資料夾開始瀏覽
     const norm = start.replace(/[\\/]+$/, '');
     const idx = Math.max(norm.lastIndexOf('\\'), norm.lastIndexOf('/'));
     if (idx > 1) start = norm.substring(0, idx);
   }
-  $('folder-modal').classList.remove('hidden');
-  fmLoad(start || '');
+  TbDirPicker.open({ start: start, dirsOnly: !!dirsOnly, fetchDir: dpFetchDir }).then(function (picked) {
+    if (!picked) return;
+    input.value = picked;
+    // 選資料夾視同確認：立即觸發驗證（若該框有驗證燈）
+    if (input._vb) vbValidate(input);
+    invalidatePreview();   // 路徑可能已變（來源/目的），舊預覽一律作廢
+  });
 }
 
 document.querySelectorAll('.browse-btn').forEach(function (btn) {
   if (!btn.dataset.target) return;   // 動態生成的瀏覽按鈕自带 listener
-  btn.addEventListener('click', function () { fmOpenFor($(btn.dataset.target)); });
-});
-$('fm-close').addEventListener('click', function () { $('folder-modal').classList.add('hidden'); });
-$('fm-up').addEventListener('click', function () { if (fm.parent) fmLoad(fm.parent); });
-$('fm-drives').addEventListener('click', function () { fmLoad(''); });
-$('fm-select').addEventListener('click', function () {
-  if (!fm.path) { alert('請先進入一個資料夾'); return; }
-  fmSelect(fm.path);
-});
-$('fm-scan').addEventListener('click', async function () {
-  if (!fm.path) { alert('請先進入一個資料夾'); return; }
-  $('fm-list').innerHTML = '<div class="fm-empty">掃描中（深度 2，最多 50 個）…</div>';
-  const r = await apiPost('/api/browse', { path: fm.path, scan: true, depth: 2, limit: 50 });
-  const list = $('fm-list');
-  list.innerHTML = '';
-  const repos = (r.json && r.json.repos) || [];
-  if (!repos.length) { list.innerHTML = '<div class="fm-empty">此處 2 層內找不到 Git Repo</div>'; return; }
-  repos.forEach(function (rp) {
-    const div = document.createElement('div');
-    div.className = 'fm-item repo-pick';
-    div.innerHTML = ICONS.gitBranch + '<span>' + esc(rp.path) + '</span><span class="git-tag">Git Repo</span>';
-    div.addEventListener('click', function () { fmSelect(rp.path); });
-    list.appendChild(div);
-  });
-});
-$('folder-modal').addEventListener('click', function (ev) {
-  if (ev.target === this) $('folder-modal').classList.add('hidden');
+  btn.addEventListener('click', function () { fmOpenFor($(btn.dataset.target), btn.dataset.dirsOnly === '1'); });
 });
 
 // ---------- 綁定驗證燈（路徑框右內緣） ----------
