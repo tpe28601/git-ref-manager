@@ -319,6 +319,13 @@ function finishJob(j) {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
   currentJob = null;
   forgetWatch(j.id);   // 工作已結束：不再需要重整後續追
+  if (j.kind === 'sync-apply') {
+    // 套用結束（含重整還原的「套用進行中…」文字）：改寫成明確終態，避免卡在進行中字樣
+    const ab = $('sync-apply');
+    if (ab.disabled && (ab.textContent === '套用進行中…' || ab.textContent.indexOf('本輪') === 0)) {
+      ab.textContent = j.state === 'Done' ? '本輪已套用；最新差異請重新預覽' : '本輪套用失敗；請重新預覽後再執行';
+    }
+  }
   const box = $('job-result');
   const t = resultText(j);
   if (t && viewMode === 'live') { box.textContent = t; box.classList.remove('hidden'); }
@@ -813,9 +820,29 @@ function checkedSubPaths() {
     .filter(function (cb) { return cb.checked; })
     .map(function (cb) { return cb.dataset.path; });
 }
+// ---------- 同步流程快照（重整後回復用） ----------
+// Job 本身存在伺服器記憶體（/api/jobs 可查、預覽 plan 也還在），重整失掉的只是
+// JS -held 的流程狀態：previewJobId、預覽表格、執行同步按鈕。把最近一輪預覽與
+// 對應的套用 job 記在 localStorage，頁面重新載入且表單驗證穩定後還原。
+const FLOW_STORAGE_KEY = 'grm.syncflow.v1';
+function flowDstKey(list) {
+  return list.map(function (p) { return String(p).trim().toLowerCase().replace(/[\\/]+$/, ''); })
+    .filter(Boolean).sort().join('\n');
+}
+function saveFlowSnapshot(patch) {
+  let snap = {};
+  try { snap = JSON.parse(localStorage.getItem(FLOW_STORAGE_KEY) || '{}') || {}; } catch (e) { snap = {}; }
+  for (const k in patch) snap[k] = patch[k];
+  try { localStorage.setItem(FLOW_STORAGE_KEY, JSON.stringify(snap)); } catch (e) { }
+}
+function clearFlowSnapshot() {
+  try { localStorage.removeItem(FLOW_STORAGE_KEY); } catch (e) { }
+}
+
 function invalidatePreview() {
   if (previewJobId != null) {
     previewJobId = null;
+    clearFlowSnapshot();   // 預覽作廢時，流程快照一併清掉
     $('sync-apply').disabled = true;
     $('sync-apply').textContent = '執行同步（預覽已失效，請重新預覽）';
     $('sync-apply').classList.remove('danger');   // 停用狀態用中性灰，紅色只留給可執行時
@@ -928,17 +955,19 @@ function subsCacheJson() {
 // 重組清單並保留使用者勾選：舊的「可處理」項目沿用原勾選；新增者可處理者維持
 // renderSubChecklist 預設（勾選）；轉為未初始化者自然落到略過列。
 function rebuildSubsFromJson(j) {
-  const prevChecked = {}, prevKnown = {};
+  const prevChecked = {}, prevKnown = {}, prevUsable = {};
   subCbs().forEach(function (cb) {
     const k = cb.dataset.path.toLowerCase();
     prevKnown[k] = true;
     prevChecked[k] = cb.checked;
+    prevUsable[k] = cb.dataset.uninit !== '1';
   });
   renderSubChecklist(j);
   subCbs().forEach(function (cb) {
     if (cb.dataset.uninit === '1') return;
     const k = cb.dataset.path.toLowerCase();
-    if (prevKnown[k]) cb.checked = !!prevChecked[k];
+    // 只沿用「上次也可處理」者的勾選；上次被略過（未勾）者轉為可處理時採預設勾選，新增者亦然
+    if (prevKnown[k] && prevUsable[k]) cb.checked = !!prevChecked[k];
   });
   updateSubCount();
 }
@@ -1022,10 +1051,14 @@ function applyPendingSubSelection() {
   if (!pendingProfileSubs) return;
   const want = {};
   pendingProfileSubs.forEach(function (p) { want[String(p).toLowerCase()] = true; });
-  subCbs().forEach(function (cb) {
-    if (cb.disabled) return;
-    cb.checked = !!want[String(cb.dataset.path).toLowerCase()];
-  });
+  // 空清單多半是「清單還沒建好時存的檔」（存檔當下驗證中、清單尚未渲染），
+  // 不是使用者刻意全取消：套下去會把預設全選清光且每次重整都重複污染，故保留預設勾選。
+  if (Object.keys(want).length) {
+    subCbs().forEach(function (cb) {
+      if (cb.disabled) return;
+      cb.checked = !!want[String(cb.dataset.path).toLowerCase()];
+    });
+  }
   pendingProfileSubs = null;
   updateSubCount();
 }
@@ -1201,6 +1234,7 @@ async function startPreviewJob() {
   const r = await apiPost('/api/sync/preview', body);
   if (r.status === 409) { showJobPanel(); setJobBadge('待機', 'idle'); alert('已有工作進行中'); return { ok: false }; }
   if (!r.json || !r.json.jobId) { setJobBadge('待機', 'idle'); alert(r.text || '啟動預覽失敗'); return { ok: false, msg: r.text }; }
+  clearFlowSnapshot();   // 新一輪預覽進行中：舊快照別讓重整還原邏輯誤用（Done 時 renderPreview 會重寫）
   $('sync-apply').disabled = true;
   const job = await watchJob(r.json.jobId);
   return { ok: true, job: job };
@@ -1302,6 +1336,7 @@ $('sync-oneclick').addEventListener('click', async function () {
       return;
     }
     if (!r.json || !r.json.jobId) { alert(r.text || '啟動同步失敗'); return; }
+    saveFlowSnapshot({ applyJobId: r.json.jobId });   // 記下這輪套用：重整後可回復「進行中／已套用」狀態
     await watchJob(r.json.jobId);
   } finally {
     clearBtn(btn);
@@ -1321,6 +1356,9 @@ $('sync-oneclick').addEventListener('click', async function () {
 
 function renderPreview(jobId, result) {
   previewJobId = jobId;
+  // 記下這輪預覽與當時的表單組合（還原時比對）；applyJobId 由 apply 送出处另寫，不動。
+  saveFlowSnapshot({ previewJobId: jobId, src: $('sync-src').value.trim(),
+                     dsts: dstRowPairs().map(function (p) { return p.path; }) });
   $('sync-preview-box').classList.remove('hidden');
   const perDst = result.perDst || [];
   let skipTotal = 0;
@@ -1401,7 +1439,10 @@ $('dst-collapse-all').addEventListener('click', function () {
 $('sync-per-dst').addEventListener('toggle', function () { updDstToggleBtn(); }, true);
 
 $('sync-force-origin-cb').addEventListener('change', function () {
-  if (previewJobId != null) $('sync-apply').disabled = !this.checked && !document.getElementById('sync-force-origin').classList.contains('hidden');
+  const btn = $('sync-apply');
+  // 還原路徑的佔位文字（本輪已套用／失敗、套用進行中）代表這輪已有結論或仍在跑：不因勾選 force 放行
+  if (/^(本輪|套用進行中)/.test(btn.textContent)) return;
+  if (previewJobId != null) btn.disabled = !this.checked && !document.getElementById('sync-force-origin').classList.contains('hidden');
 });
 
 $('sync-apply').addEventListener('click', async function () {
@@ -1436,6 +1477,7 @@ $('sync-apply').addEventListener('click', async function () {
   }
   if (!r.json || !r.json.jobId) { setJobBadge('待機', 'idle'); alert(r.text || '啟動同步失敗'); return; }
   $('sync-apply').disabled = true;
+  saveFlowSnapshot({ applyJobId: r.json.jobId });   // 記下這輪套用：重整後可回復「進行中／已套用」狀態
   watchJob(r.json.jobId);
 });
 
@@ -1578,7 +1620,8 @@ function collectProfileState() {
     sync: { src: $('sync-src').value.trim(), dsts: dsts,
             origin: $('sync-origin').checked, heads: $('sync-heads').checked, recurse: $('sync-recurse').checked,
             forceAlways: $('sync-force-always-cb').checked,
-            subs: checkedSubPaths() },
+            // 清單尚未建立時存 null：此時 checkedSubPaths() 必為空，存成 [] 會在還原時誤清勾選
+            subs: subsListReady() ? checkedSubPaths() : null },
     fetch: { a: $('fetch-a').value.trim(), b: $('fetch-b').value.trim(),
              prune: $('fetch-prune').checked, recurse: $('fetch-recurse').checked },
     wt: { source: $('wt-source').value.trim(), parent: $('wt-parent').value.trim(), folder: $('wt-folder').value.trim(),
@@ -1814,4 +1857,79 @@ window.addEventListener('pagehide', function () {
     if (d && d.state === 'Running') watchJob(id);
     else forgetWatch(id);
   }).catch(function () { forgetWatch(id); });
+})();
+
+// ---------- 重整後還原上一輪預覽／套用狀態 ----------
+// 等「上次設定」把表單填好、且來源與所有目的列驗證燈都到終態（或 30 秒逾時兜底）後，
+// 比對表單與流程快照：一致就以服務端仍存活的預覽 job 重現預覽表格，並依套用 job
+// 狀態決定按鈕（進行中／已套用／失敗都維持停用）。刻意不自動續送 apply——重整不該
+// 讓同步自己跑起來，使用者永遠是在回復好的畫面上親按下一個動作。
+(function restoreSyncFlow() {
+  let snap = null;
+  try { snap = JSON.parse(localStorage.getItem(FLOW_STORAGE_KEY) || 'null'); } catch (e) { clearFlowSnapshot(); return; }
+  if (!snap || !(snap.previewJobId > 0) || !Array.isArray(snap.dsts)) { clearFlowSnapshot(); return; }   // 髒資料順手清掉，不讓它滯留
+  let tries = 0;
+  function vbSettled(input) {
+    const s = input._vb;
+    return !!s && (s.status === 'ok' || s.status === 'bad');
+  }
+  function formReady() {
+    if (!vbSettled($('sync-src'))) return false;
+    const rows = dstRowsWithInputs();
+    if (!rows.length) return false;
+    return rows.every(function (r) { return vbSettled(r.input); });
+  }
+  function probeApply(applyId) {
+    fetch('/api/jobs?id=' + applyId + '&cursor=2147483647').then(function (res) {
+      if (!res.ok) return null;   // job 已不在（伺服器重啟過）：維持停用佔位，請使用者重新預覽
+      return res.json();
+    }).then(function (a) {
+      if (!a) return;
+      if (previewJobId !== snap.previewJobId) return;   // 期間已重新預覽／作廢
+      const btn = $('sync-apply');
+      btn.disabled = true;
+      btn.classList.remove('danger');
+      btn.classList.add('secondary');
+      btn.textContent = a.state === 'Running' ? '套用進行中…'
+        : a.state === 'Failed' ? '本輪套用失敗；請重新預覽後再執行'
+        : '本輪已套用；最新差異請重新預覽';
+    }).catch(function () { });
+  }
+  function doRestore() {
+    fetch('/api/jobs?id=' + snap.previewJobId + '&cursor=2147483647').then(function (res) {
+      if (!res.ok) { clearFlowSnapshot(); return null; }   // 伺服器重啟：job 與預覽 plan 都沒了
+      return res.json();
+    }).then(function (d) {
+      if (!d) return;
+      if (d.kind !== 'sync-preview' || d.state !== 'Done' || !d.result) { clearFlowSnapshot(); return; }
+      renderPreview(d.id, d.result);
+      profileHint('已還原上次同步預覽');
+      if (snap.applyJobId > 0) {
+        // 先同步鎖住按鈕：探測要一次 RTT，期間老 plan 還活着，按下去會把同一輪再套一次
+        const btn = $('sync-apply');
+        btn.disabled = true;
+        btn.classList.remove('danger');
+        btn.classList.add('secondary');
+        btn.textContent = '套用進行中…';
+        probeApply(snap.applyJobId);
+      }
+    }).catch(function () { });
+  }
+  const timer = setInterval(function () {
+    tries++;
+    if (previewJobId != null || oneclickRunning) { clearInterval(timer); return; }   // 使用者已自己重跑
+    try { snap = JSON.parse(localStorage.getItem(FLOW_STORAGE_KEY) || 'null'); } catch (e) { snap = null; }
+    if (!snap || !(snap.previewJobId > 0) || !Array.isArray(snap.dsts)) { clearInterval(timer); return; }   // 快照已被新流程清掉／覆蓋
+    const srcV = $('sync-src').value.trim();
+    const matches = flowDstKey([snap.src || '']) === flowDstKey([srcV]) &&
+      flowDstKey(snap.dsts) === flowDstKey(dstRowPairs().map(function (p) { return p.path; }));
+    if (tries > 50) {   // 30 秒兜底：驗證太慢或無 profile 可還原；比對不上就放棄快照
+      clearInterval(timer);
+      if (matches) doRestore(); else clearFlowSnapshot();
+      return;
+    }
+    if (!srcV || !matches || !formReady()) return;   // 表單尚未還原填好／驗證中：續等
+    clearInterval(timer);
+    doRestore();
+  }, 600);
 })();
