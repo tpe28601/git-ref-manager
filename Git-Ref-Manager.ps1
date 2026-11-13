@@ -356,12 +356,14 @@ try {
     Write-Host '[3] 建立 Worktree，共用 origin/*（新資料夾）'
     Write-Host '[4] Auto：同步 origin/* + 所有 Submodule（可多個目的，彙總預覽，一次確認）'
     Write-Host '[0] 離開'
-    $choice = Read-Host "`n請選擇 [0/1/2/3/4]"
+    Write-Host '[5] 檢查更新'
+    $choice = Read-Host "`n請選擇 [0/1/2/3/4/5]"
     switch ($choice) {
         '1' { Run-SyncLocalRefs }
         '2' { Run-FetchOrigins }
         '3' { Run-Worktree }
         '4' { [void](Run-AutoSync $null $null $false) }
+        '5' { & (Join-Path $PSScriptRoot 'Standalone-Update.ps1') -Action Open }
         '0' { Write-Host '已結束。' }
         default { Write-Warning '無效選項。' }
     }

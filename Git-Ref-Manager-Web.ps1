@@ -614,6 +614,7 @@ function Get-UiFile([string]$path) {
         '/'          = 'index.html'
         '/index.html' = 'index.html'
         '/app.js'   = 'app.js'
+        '/tb-standalone-update.js' = 'tb-standalone-update.js'
         '/style.css' = 'style.css'
         '/ui-kit.css' = 'ui-kit.css'
         '/tb-theme.js' = 'tb-theme.js'
@@ -626,6 +627,7 @@ function Get-UiFile([string]$path) {
     $type = switch ($map[$path]) {
         'index.html' { 'text/html; charset=utf-8' }
         'app.js'    { 'application/javascript; charset=utf-8' }
+        'tb-standalone-update.js' { 'application/javascript; charset=utf-8' }
         'style.css' { 'text/css; charset=utf-8' }
         'ui-kit.css' { 'text/css; charset=utf-8' }
         'tb-theme.js' { 'application/javascript; charset=utf-8' }
@@ -656,6 +658,24 @@ function Route-Request($req, $ctx) {
     }
 
     switch ($path) {
+        '/api/standalone-update' {
+            if ($req.Method -ne 'POST') { Send-Text $ctx 405 'Method Not Allowed'; return }
+            if ($ParentPid -gt 0) { Send-Text $ctx 403 '請從 Hub 更新工具。'; return }
+            $body = Read-JsonBody $req
+            $updater = Join-Path $PSScriptRoot 'Standalone-Update.ps1'
+            if ($body.action -eq 'check') {
+                $result = & $updater -Action Check | ConvertFrom-Json
+                Send-JsonRaw $ctx $result
+                return
+            }
+            if ($body.action -ne 'open' -or [string]$body.version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$') {
+                Send-Text $ctx 400 '更新請求格式不正確。'
+                return
+            }
+            & $updater -Action Open -Version $body.version
+            Send-JsonRaw $ctx @{ ok = $true }
+            return
+        }
         '/api/health' {
             Send-JsonRaw $ctx ([pscustomobject]@{
                 ok = $true
