@@ -668,13 +668,13 @@ function vbValidate(input, force) {
   if (!v) { vbSetStatus(input, 'empty', { path: null }); s.pending = null; return Promise.resolve(); }
   // 同路徑不重驗（省大 Repo 幾十秒）；force（Enter／重新驗證鈕）繞過此快取
   if (!force && s.status === 'ok' && s.path === v) return Promise.resolve();
-  if (s.status === 'checking' && s.path === v && s.pending) return s.pending; // 加入進行中
-  const p = vbDoValidate(input, v).then(function () { if (s.pending === p) s.pending = null; });
+  if (!force && s.status === 'checking' && s.path === v && s.pending) return s.pending; // 加入進行中；force 一定要新請求（舊請求可能命中快取，繞過意圖會落空）
+  const p = vbDoValidate(input, v, force).then(function () { if (s.pending === p) s.pending = null; });
   s.pending = p;
   return p;
 }
 
-async function vbDoValidate(input, v) {
+async function vbDoValidate(input, v, force) {
   const s = input._vb;
   if (s.group === 'sync-dst') {
     // 送出前先擋同路徑：與 A 相同＝彈窗提示；與其他目的列重複＝紅旗（不發請求）
@@ -697,6 +697,7 @@ async function vbDoValidate(input, v) {
   let r;
   try {
     const body = { src: v };
+    if (force) body.force = true;   // 繞過伺服器短效快取（外部動過 Repo 時 Enter 取最新）
     if (s.group === 'sync-src') {
       snap = dstRowsWithInputs();
       body.dstList = snap.map(function (p) { return p.path; });
@@ -1357,8 +1358,14 @@ $('sync-oneclick').addEventListener('click', async function () {
 function renderPreview(jobId, result) {
   previewJobId = jobId;
   // 記下這輪預覽與當時的表單組合（還原時比對）；applyJobId 由 apply 送出处另寫，不動。
-  saveFlowSnapshot({ previewJobId: jobId, src: $('sync-src').value.trim(),
-                     dsts: dstRowPairs().map(function (p) { return p.path; }) });
+  // 續追（重整後 reattach 的預覽 Done）時表單可能還沒被「上次設定」回填：
+  // 空表單別覆寫快照，寧可保留舊值讓 restoreSyncFlow 的比對自行把關。
+  const snapPatch = { previewJobId: jobId };
+  const snapSrc = $('sync-src').value.trim();
+  const snapDsts = dstRowPairs().map(function (p) { return p.path; });
+  if (snapSrc) snapPatch.src = snapSrc;
+  if (snapDsts.length) snapPatch.dsts = snapDsts;
+  saveFlowSnapshot(snapPatch);
   $('sync-preview-box').classList.remove('hidden');
   const perDst = result.perDst || [];
   let skipTotal = 0;

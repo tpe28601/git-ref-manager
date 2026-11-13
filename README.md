@@ -1,6 +1,6 @@
 # Git Ref Manager
 
-**Git Ref Manager 1.2.0** 是 Windows 上的 Git ref／origin／worktree 管理工具，附 CLI 選單與本機 Web 控制台，支援 Submodule。
+**Git Ref Manager 1.2.4** 是 Windows 上的 Git ref／origin／worktree 管理工具，附 CLI 選單與本機 Web 控制台，支援 Submodule。
 
 它主要解決一件事：**同一個專案在電腦上有好幾份 Clone，卻不想每一份都連網路 fetch 一次。** 只要其中一份（A）fetch 過，就能把 A 的 `origin/*` 離線同步到其他 Clone（B、C…），連同所有 Submodule 一起處理。
 
@@ -59,6 +59,7 @@ cd git-ref-manager
    - 轉圈：驗證中
    - ✓：通過，點一下可以看分支、origin、未提交變更、Submodule 明細
    - ✗：失敗，原因顯示在框下方
+   - 路徑框按 Enter = 強制重新驗證（繞過伺服器數秒的短效快取，外部動過 Repo 時取最新）
 2. 勾選要同步的項目：`origin/*`、本地 Branch 備份、Submodule。在 Submodule 清單可以逐顆勾選，還沒初始化的會灰顯並略過。
 3. 選一種方式執行：
    - **預覽差異**：每個目的 Repo 一個區塊，列出新增、更新、衝突略過的數量，確認後再按「執行同步」。

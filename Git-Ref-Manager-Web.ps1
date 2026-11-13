@@ -30,8 +30,10 @@ Assert-Git
 
 # ---------------- 驗證／初始化結果（路由與子行程共用，僅依賴 GitRefCore） ----------------
 
-function Get-ValidateResult([pscustomobject]$b) {
-    $s = Get-RepoSummary ([string]$b.src)
+function Get-ValidateResult([pscustomobject]$b, [scriptblock]$Fetcher) {
+    # Fetcher 可注入摘要來源（主迴圈快取命中路徑）；預設即時掃描（子行程模式）
+    if (-not $Fetcher) { $Fetcher = { param($p) Get-RepoSummary ([string]$p) } }
+    $s = & $Fetcher ([string]$b.src)
     $errs = @()
     if (-not $s.ok) { $errs += "A：$($s.error)" }
     # 目的 Repo：dstList（陣列，可多個）或 dst（單一個，相容舊前端）
@@ -41,11 +43,16 @@ function Get-ValidateResult([pscustomobject]$b) {
     $dstResults = @()
     foreach ($dd in $dstArr) {
         if ([string]::IsNullOrWhiteSpace($dd)) { continue }
-        $d = Get-RepoSummary $dd
+        $d = & $Fetcher $dd
         if (-not $d.ok) { $errs += "B（$dd）：$($d.error)" }
         $same = $null; $match = $null
         if ($s.ok -and $d.ok) {
-            try { $same = ((Get-CommonDir $s.path) -eq (Get-CommonDir $d.path)) } catch { $errs += "CommonDir 檢查失敗（$dd）：$($_.Exception.Message)" }
+            try {
+                # 摘要已帶 commonDir（快取路徑免再跑 git）；舊形狀退回即時查詢
+                $ca = if ($s.PSObject.Properties['commonDir'] -and [string]$s.commonDir) { [string]$s.commonDir } else { [string](Get-CommonDir $s.path) }
+                $cb = if ($d.PSObject.Properties['commonDir'] -and [string]$d.commonDir) { [string]$d.commonDir } else { [string](Get-CommonDir $d.path) }
+                $same = ($ca -eq $cb)
+            } catch { $errs += "CommonDir 檢查失敗（$dd）：$($_.Exception.Message)" }
             $match = ($s.origin -eq $d.origin)
         }
         $dstResults += [pscustomobject]@{ summary = $d; sameCommonDir = $same; originMatch = $match }
@@ -460,6 +467,19 @@ $script:OpTmpDir = Join-Path $env:TEMP 'git-ref-mgr'
 $script:ValMaxParallel = 3        # 驗證子行程併行上限（超出的排隊）
 $script:ValTimeoutSec = 120
 $script:InitTimeoutSec = 1200     # Submodule 初始化從本機複製，大顆也綽綽有餘
+$script:SummaryCache = New-SummaryCache 8   # 驗證摘要短效快取：重整瞬間的重複驗證直接回覆（UI Enter 繞過）
+$script:RepoMutation = [datetime]::MinValue  # 最近一次 Repo 狀態變更（subinit 結案）：之前派出的驗證不回灌快取
+
+function Seed-ValidateCache($op, [string]$Json) {
+    # 子行程跑完的摘要餵回主迴圈快取：同波次其他輸入框／數秒內的同路徑驗證
+    # 不再重複開子行程；失敗摘要（ok=false）不進快取。
+    # 掃描派工早於最後一次 Repo 變更（subinit）→ 資料已過期，晚到也不准覆寫。
+    if ($null -ne $op -and $op.Issued -lt $script:RepoMutation) { return }
+    try { $r = $Json | ConvertFrom-Json } catch { return }
+    if ($null -eq $r) { return }
+    Set-CachedSummary $script:SummaryCache $r.src
+    foreach ($d in @($r.dsts)) { if ($null -ne $d -and $null -ne $d.summary) { Set-CachedSummary $script:SummaryCache $d.summary } }
+}
 
 function Test-PendingSubInit {
     foreach ($op in $script:PendingOps) { if ($op.Kind -eq 'subinit') { return $true } }
@@ -482,6 +502,7 @@ function Start-PendingOp([string]$Kind, $ctx, [string]$payload) {
         OutFile  = (Join-Path $script:OpTmpDir "$gid.out.json")
         Proc     = $null
         Deadline = $null
+        Issued   = (Get-Date)   # 派工時間：與 RepoMutation 比對，淘汰跨越狀態變更的過期 seed
     }
     [System.IO.File]::WriteAllText($op.ReqFile, $payload, (New-Object System.Text.UTF8Encoding($false)))
     [void]$script:PendingOps.Add($op)
@@ -497,6 +518,17 @@ function Start-PendingProc($op) {
 }
 
 function Complete-PendingOp($op, [int]$code, [string]$json) {
+    if ($op.Kind -eq 'subinit') {
+        # subinit 會動到 B 的 Submodule 初始化態（失敗/逾時也可能已部分寫盤）：
+        # 標記 Repo 變更並淘汰 B 的快取摘要，不依賴前端 force 重驗補破洞。
+        $script:RepoMutation = Get-Date
+        try {
+            $rq = [System.IO.File]::ReadAllText($op.ReqFile) | ConvertFrom-Json
+            if ($null -ne $rq -and -not [string]::IsNullOrWhiteSpace([string]$rq.dst)) {
+                Remove-CachedSummary $script:SummaryCache ([string]$rq.dst)
+            }
+        } catch { }   # 請求檔讀不到就只記 mutation，不影響結案
+    }
     [void]$script:PendingOps.Remove($op)
     try {
         $bytes = if ($json) { [System.Text.Encoding]::UTF8.GetBytes($json) } else { [byte[]]@() }
@@ -536,7 +568,10 @@ function Invoke-PendingOps {
         }
         $json = $null
         try { if (Test-Path -LiteralPath $op.OutFile) { $json = [System.IO.File]::ReadAllText($op.OutFile) } } catch { $json = $null }
-        if ($json) { Complete-PendingOp $op 200 $json }
+        if ($json) {
+            if ($op.Kind -eq 'validate') { try { Seed-ValidateCache $op $json } catch { } }   # 餵主迴圈快取（失敗/解析不了靜略過，絕不拖垮主迴圈）
+            Complete-PendingOp $op 200 $json
+        }
         else { Complete-PendingOp $op 500 (ConvertTo-Json ([pscustomobject]@{ error = '操作未產生結果（子行程異常結束）' }) -Depth 5 -Compress) }
     }
 }
@@ -654,8 +689,31 @@ function Route-Request($req, $ctx) {
 
         '/api/validate' {
             # 長驗證交子行程：註冊延遲回覆後立刻返回，主迴圈照常接 browse／其他驗證
-            [void](Read-JsonBody $req)   # 先檢查 JSON 格式（格式錯誤仍同步報錯）
+            $body = Read-JsonBody $req   # 先檢查 JSON 格式（格式錯誤仍同步報錯）
             $payload = if ([string]::IsNullOrWhiteSpace($req.Body)) { '{}' } else { $req.Body }
+            if (-not [bool]$body.force) {
+                # 突發去重：src 與所有 dst 數秒內才掃過就同步回覆（重整瞬間多框
+                # 同路徑不再重複開子行程）；任一缺摘要或 body.force 仍走子行程實扫。
+                # 檢查與重建共用同一批取到的摘要（$map），不會因兩次查詢剛好跨過 TTL 而拿到空摘要。
+                $map = @{}
+                $srcSum = Get-CachedSummary $script:SummaryCache ([string]$body.src)
+                $allHit = ($null -ne $srcSum)
+                if ($allHit) { $map[(Get-NormalizedRepoKey ([string]$body.src))] = $srcSum }
+                $pathsCheck = @()
+                if ($body.PSObject.Properties.Name -contains 'dstList') { $pathsCheck = @($body.dstList | ForEach-Object { [string]$_ }) }
+                elseif (-not [string]::IsNullOrWhiteSpace($body.dst)) { $pathsCheck = @([string]$body.dst) }
+                foreach ($p in $pathsCheck) {
+                    if ([string]::IsNullOrWhiteSpace($p)) { continue }   # 空 dst 驗證端本來就跳過
+                    $sum = Get-CachedSummary $script:SummaryCache $p
+                    if ($null -eq $sum) { $allHit = $false; break }
+                    $map[(Get-NormalizedRepoKey $p)] = $sum
+                }
+                if ($allHit) {
+                    $cached = Get-ValidateResult $body { param($p) $k = Get-NormalizedRepoKey ([string]$p); if ($map.ContainsKey($k)) { $map[$k] } else { $null } }
+                    Send-JsonRaw $ctx $cached
+                    return
+                }
+            }
             Start-PendingOp 'validate' $ctx $payload
             return
         }
@@ -671,7 +729,9 @@ function Route-Request($req, $ctx) {
             foreach ($p in $paths) {
                 try {
                     $root = Get-GitRoot ([string]$p)
-                    $items += [pscustomobject]@{ path = [string]$p; ok = $true; subs = @(Get-SubmoduleStatusList $root) }
+                    $subs = Get-SubmoduleStatusList $root   # 失敗回 $null：對前端維持空清單（與舊行為一致）
+                    if ($null -eq $subs) { $subs = @() }
+                    $items += [pscustomobject]@{ path = [string]$p; ok = $true; subs = @($subs) }
                 } catch {
                     $items += [pscustomobject]@{ path = [string]$p; ok = $false; error = $_.Exception.Message }
                 }

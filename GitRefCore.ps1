@@ -94,8 +94,9 @@ function Get-InitializedSubmodulePaths([string]$Repo) {
 
 function Get-SubmoduleStatusList([string]$Repo) {
     # 遞迴列出所有 Submodule 相對路徑與初始化狀態（含未初始化 '-' 與衝突 'U'），供 Web 勾選清單用。
+    # 掃描失敗回傳 $null（區別於「沒有 Submodule」的空清單），讓呼叫端能退守或標示。
     $r = Invoke-Git -Repo $Repo -GitArgs @('submodule','status','--recursive') -AllowFail
-    if ($r.Code -ne 0) { return @() }
+    if ($r.Code -ne 0) { return $null }
     $seen = @{}
     $list = New-Object 'System.Collections.Generic.List[object]'
     foreach ($line in @($r.Lines)) {
@@ -121,24 +122,82 @@ function Get-RepoSummary([string]$Repo) {
         $subTotal = 0; $subInit = 0
         $subPaths = @()
         if (Test-Path -LiteralPath (Join-Path $root '.gitmodules')) {
-            $sm = Invoke-Git -Repo $root -GitArgs @('submodule','status') -AllowFail
-            foreach ($l in @($sm.Lines)) {
-                                if ($l -match '^\s*[ +\-U][0-9a-fA-F]{40,64}') { $subTotal++; if (-not $l.StartsWith('-')) { $subInit++ } }
+            # 單趟 --recursive 同時供完整清單與計數：無 '/' 的條目即頂層 Submodule，
+            # 維持舊版非遞迴輸出的 total/initialized 顯示語意，省掉第二次 git 行程。
+            $subPaths = Get-SubmoduleStatusList $root
+            if ($null -eq $subPaths) {
+                # 遞迴掃描失敗（例如某顆子模块工作樹損壞讓 --recursive fatal）：
+                # 退回非遞迴計數，避免有 .gitmodules 的 Repo 靜默報 0 顆。
+                $sm = Invoke-Git -Repo $root -GitArgs @('submodule','status') -AllowFail
+                foreach ($l in @($sm.Lines)) {
+                    if ($l -match '^\s*[ +\-U][0-9a-fA-F]{40,64}') { $subTotal++; if (-not $l.StartsWith('-')) { $subInit++ } }
+                }
+                $subPaths = @()
+            } else {
+                $subPaths = @($subPaths)
+                foreach ($sp in $subPaths) {
+                    if ($sp.path -notmatch '[\\/]') { $subTotal++; if ($sp.initialized) { $subInit++ } }
+                }
             }
-            $subPaths = @(Get-SubmoduleStatusList $root)
         }
+        $commonDir = ''
+        try { $commonDir = [string](Get-CommonDir $root) } catch { }   # 取得失敗留空，驗證端會退回即時查詢
         return [pscustomobject]@{
             path = $root
             ok = $true
             branch = [string]$branch
             origin = [string](Get-OriginUrl $root)
             dirty = $dirty
+            commonDir = $commonDir
             submodules = @{ total = $subTotal; initialized = $subInit }
             submodulePaths = $subPaths
         }
     } catch {
         return [pscustomobject]@{ path = $Repo; ok = $false; error = $_.Exception.Message }
     }
+}
+
+# ---------------- Repo 摘要 TTL 快取（Web 重整驗證突發去重） ----------------
+# 頁面重新載入時 UI 會對同一批 Repo 幾乎同時發出好幾筆驗證，每筆原本都要
+# 開短命子行程掃 git（含 submodule status）。主迴圈把摘要短效快取，突發期
+# 內直接記憶體回覆；UI 按 Enter 強制重驗會繞過此快取，外部改動仍可即時反映。
+
+function Get-NormalizedRepoKey([string]$Repo) {
+    $v = ([string]$Repo).Trim().Trim('"')
+    $v = $v -replace '/', '\'   # C:/x 與 C:\x 同一顆 Repo
+    $v = $v -replace '[\\]+$', ''
+    return $v.ToLowerInvariant()
+}
+
+function New-SummaryCache([double]$TtlSec = 8) {
+    return [pscustomobject]@{ Ttl = [TimeSpan]::FromSeconds($TtlSec); Items = [hashtable]::Synchronized(@{}) }
+}
+
+function Get-CachedSummary($Cache, [string]$Repo) {
+    if ($null -eq $Cache) { return $null }
+    $key = Get-NormalizedRepoKey $Repo
+    if ([string]::IsNullOrWhiteSpace($key)) { return $null }
+    if (-not $Cache.Items.ContainsKey($key)) { return $null }
+    $ent = $Cache.Items[$key]
+    if ((Get-Date) -gt $ent.Expires) { [void]$Cache.Items.Remove($key); return $null }
+    return $ent.Summary
+}
+
+function Set-CachedSummary($Cache, $Summary) {
+    if ($null -eq $Cache -or $null -eq $Summary) { return }
+    if (-not $Summary.PSObject.Properties['ok'] -or -not [bool]$Summary.ok) { return }   # 失敗摘要不緩存，重試即時重掃
+    if (-not $Summary.PSObject.Properties['path']) { return }
+    $key = Get-NormalizedRepoKey ([string]$Summary.path)
+    if ([string]::IsNullOrWhiteSpace($key)) { return }
+    $Cache.Items[$key] = [pscustomobject]@{ Summary = $Summary; Expires = (Get-Date).Add($Cache.Ttl) }
+}
+
+function Remove-CachedSummary($Cache, [string]$Repo) {
+    # Repo 狀態被變更（如 Submodule 初始化）後淘汰舊摘要，下次驗證即時重掃
+    if ($null -eq $Cache) { return }
+    $key = Get-NormalizedRepoKey $Repo
+    if ([string]::IsNullOrWhiteSpace($key)) { return }
+    [void]$Cache.Items.Remove($key)
 }
 
 function Get-OrdinalSortedNames([string[]]$Names) {
@@ -168,7 +227,9 @@ function Find-RefConflicts($Updates, $DstNamesSorted, [System.Collections.Generi
         if (-not $bad) {
             $prefix = $t + '/'
             $idx = [Array]::BinarySearch($DstNamesSorted, $prefix, [System.StringComparer]::Ordinal)
-            if ($idx -lt 0) { $idx = -not $idx - 1 }
+            # PowerShell 運算子優先序：必須寫成 (-$idx) - 1；`-not $idx - 1` 會被解析成
+            # (-not $idx) - 1 = -1，反向 D/F 檢查永遠查錯位置而漏判。
+            if ($idx -lt 0) { $idx = (-$idx) - 1 }
             if ($idx -lt $DstNamesSorted.Count -and $DstNamesSorted[$idx].StartsWith($prefix, [System.StringComparison]::Ordinal)) {
                 $bad = "目的端已有子分支：$($DstNamesSorted[$idx])"
             }
