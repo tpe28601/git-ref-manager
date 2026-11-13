@@ -66,7 +66,7 @@ async function apiPost(path, body) {
 }
 
 // ---------- 功能說明彈視 ----------
-var HELP_TITLES = { sync: '功能說明：本地同步', fetch: '功能說明：Fetch Origin', worktree: '功能說明：Worktree' };
+var HELP_TITLES = { sync: '功能說明：本地同步（Repo A -> Repo B）', fetch: '功能說明：Fetch Origin', worktree: '功能說明：Worktree' };
 function helpClose() { $('help-modal').classList.add('hidden'); }
 document.querySelectorAll('.help-btn').forEach(function (btn) {
   btn.addEventListener('click', function () {
@@ -324,6 +324,11 @@ function finishJob(j) {
     const ab = $('sync-apply');
     if (ab.disabled && (ab.textContent === '套用進行中…' || ab.textContent.indexOf('本輪') === 0)) {
       ab.textContent = j.state === 'Done' ? '本輪已套用；最新差異請重新預覽' : '本輪套用失敗；請重新預覽後再執行';
+    }
+    // 套用成功：自動重掃一輪預覽讓表格直接顯示同步後的最新差異（一鍵流程內自己掃，
+    // 歷史瀏覽中不打擾；Failed 不掃，保留錯誤畫面）。
+    if (j.state === 'Done' && viewMode === 'live' && !oneclickRunning) {
+      scheduleAutoRepreview();
     }
   }
   const box = $('job-result');
@@ -840,6 +845,52 @@ function clearFlowSnapshot() {
   try { localStorage.removeItem(FLOW_STORAGE_KEY); } catch (e) { }
 }
 
+// ---------- 一鍵同步「意圖」（獨立 key，不與流程快照共生命週期） ----------
+// 一鍵同步送套用前被重整打斷 → 還原後自動接續的判斷依據。刻意不放 FLOW 快照：
+// 快照會被 invalidatePreview／startPreviewJob／還原邏輯多方清寫，意圖混在裡面
+// 容易留下「過期卻永久有效」的地雷。這裡帶時間戳視窗與表單指紋，並由放棄路徑清除。
+const ONECLICK_INTENT_KEY = 'grm.oneclickintent.v1';
+const ONECLICK_INTENT_TTL_MS = 10 * 60 * 1000;   // 超過 10 分鐘的意圖視為過期，不再自動接續
+function writeOneclickIntent(src, dsts) {
+  try {
+    localStorage.setItem(ONECLICK_INTENT_KEY, JSON.stringify(
+      { t: Date.now(), src: src || '', dsts: dsts || [], applied: false }));
+  } catch (e) { }
+}
+function markOneclickApplied() {
+  try {
+    const it = JSON.parse(localStorage.getItem(ONECLICK_INTENT_KEY) || 'null');
+    if (it) { it.applied = true; localStorage.setItem(ONECLICK_INTENT_KEY, JSON.stringify(it)); }
+  } catch (e) { }
+}
+function clearOneclickIntent() {
+  try { localStorage.removeItem(ONECLICK_INTENT_KEY); } catch (e) { }
+}
+function readOneclickIntent() {
+  let it = null;
+  try { it = JSON.parse(localStorage.getItem(ONECLICK_INTENT_KEY) || 'null'); } catch (e) { return null; }
+  if (!it || it.applied !== false || !Array.isArray(it.dsts)) return null;
+  if (!(it.t > 0) || (Date.now() - it.t) > ONECLICK_INTENT_TTL_MS) { clearOneclickIntent(); return null; }
+  return it;
+}
+// 目前表單是否仍是意圖當時的組合（src／所有目的列，正規化比對）
+function formMatchesIntent(it) {
+  if (!it) return false;
+  return flowDstKey([it.src || '']) === flowDstKey([$('sync-src').value.trim()]) &&
+    flowDstKey(it.dsts) === flowDstKey(dstRowPairs().map(function (p) { return p.path; }));
+}
+// 自動接續評估：意圖存活＋開關開啟＋非一鍵進行中＋表單未變 + 驗證全綠才觸發
+function maybeOneclickResume() {
+  if (oneclickRunning || !$('sync-auto-resume-cb').checked) return;
+  const it = readOneclickIntent();
+  if (!it) return;
+  // 表單還沒被「上次設定」回填（重整開頁時 reattach 的 renderPreview 可能先跑）：
+  // 空表單比對必然不符，此時跳過不清意圖，由 initProfileRestore 末尾再評估一次。
+  if (!$('sync-src').value.trim() && !dstRowPairs().length) return;
+  if (!formMatchesIntent(it)) { clearOneclickIntent(); return; }   // 表單已改：接續語意不成立
+  scheduleOneclickResume();
+}
+
 function invalidatePreview() {
   if (previewJobId != null) {
     previewJobId = null;
@@ -1223,18 +1274,27 @@ function clearBtn(btn) {
 }
 
 // 送出預覽工作並等完成；回傳 { ok, job }（409/啟動失敗時 ok=false）
-async function startPreviewJob() {
+// silent=true：套用完成後的自動重掃用——撞車/失敗靜默放棄，不彈窗不打擾
+async function startPreviewJob(silent) {
   const body = {
     src: $('sync-src').value.trim(),
     dstList: dstRowPairs().map(function (p) { return p.path; }),
     includeOrigin: $('sync-origin').checked,
     includeHeads: $('sync-heads').checked,
+    headsPrefix: $('sync-heads-prefix').value.trim(),   // 空白＝伺服器用預設命名空間
     recurse: $('sync-recurse').checked
   };
   if (subsListReady()) body.submodules = checkedSubPaths();   // 有勾選清單時只同步被勾選者
   const r = await apiPost('/api/sync/preview', body);
-  if (r.status === 409) { showJobPanel(); setJobBadge('待機', 'idle'); alert('已有工作進行中'); return { ok: false }; }
-  if (!r.json || !r.json.jobId) { setJobBadge('待機', 'idle'); alert(r.text || '啟動預覽失敗'); return { ok: false, msg: r.text }; }
+  if (r.status === 409) {
+    if (silent) return { ok: false };
+    showJobPanel(); setJobBadge('待機', 'idle'); alert('已有工作進行中'); return { ok: false };
+  }
+  if (!r.json || !r.json.jobId) {
+    if (silent) return { ok: false, msg: r.text };
+    setJobBadge('待機', 'idle'); alert(r.text || '啟動預覽失敗'); return { ok: false, msg: r.text };
+  }
+  if (autoRepreviewTimer) { clearInterval(autoRepreviewTimer); autoRepreviewTimer = null; }   // 新一輪預覽開始：作廢等待中的自動重掃
   clearFlowSnapshot();   // 新一輪預覽進行中：舊快照別讓重整還原邏輯誤用（Done 時 renderPreview 會重寫）
   $('sync-apply').disabled = true;
   const job = await watchJob(r.json.jobId);
@@ -1292,6 +1352,8 @@ $('sync-oneclick').addEventListener('click', async function () {
     setBtnBusy(btn, '驗證 Repo 中…');
     const bad = await ensureSyncValidated();
     if (bad.length) { alert('Repo 驗證未通過，已停止一鍵同步：\n' + bad.join('\n')); return; }
+    // 寫入「一鍵意圖」：送套用前被重整打斷時，還原流程靠它辨識並自動接續
+    writeOneclickIntent(src, dsts);
     // 2. 自動預覽（先做輕量 Submodule 比對，工具外動過初始化時自動刷新清單）
     setBtnBusy(btn, '檢查 Submodule…');
     await subsLightCheck();
@@ -1327,21 +1389,32 @@ $('sync-oneclick').addEventListener('click', async function () {
     }
     // 5. 套用（仍走後端 plan，planStale 防護不變）
     setBtnBusy(btn, '套用中…');
-    const ab = { jobId: job.id, forceOrigin: force, dstList: dsts };
+    const ab = { jobId: job.id, forceOrigin: force, dstList: dsts,
+                 headsPrefix: $('sync-heads-prefix').value.trim() };
     if (subsListReady()) ab.submodules = checkedSubPaths();
     const r = await apiPost('/api/sync/apply', ab);
     if (r.status === 409) { alert('已有工作進行中'); return; }
     if (r.status === 400 && r.json && r.json.error === 'planStale') {
-      alert('目的 Repo 清單或 Submodule 勾選與預覽時不一致，請重新預覽。');
+      alert(r.json.reason === 'headsPrefix'
+        ? '備份命名空間與預覽時不一致，請重新預覽。'
+        : '目的 Repo 清單或 Submodule 勾選與預覽時不一致，請重新預覽。');
       previewJobId = null;
       return;
     }
     if (!r.json || !r.json.jobId) { alert(r.text || '啟動同步失敗'); return; }
     saveFlowSnapshot({ applyJobId: r.json.jobId });   // 記下這輪套用：重整後可回復「進行中／已套用」狀態
-    await watchJob(r.json.jobId);
+    markOneclickApplied();                            // 已送套用：自動接續意圖完成使命
+    const aj = await watchJob(r.json.jobId);
+    if (aj.state === 'Done') {
+      // 套用完成：自動重掃一輪預覽（oneclickRunning 仍 true，finishJob 鉤子不會重複觸發）
+      setBtnBusy(btn, '重掃差異…');
+      await startPreviewJob(true);
+    }
   } finally {
     clearBtn(btn);
     oneclickRunning = false;
+    // 本輪一鍵結束（成功、無差異、取消、失敗都算）：意圖除役，之後的預覽不會誤接續
+    clearOneclickIntent();
     $('sync-oneclick').disabled = false;
     $('sync-preview').disabled = false;
     if (jobFlow) {
@@ -1357,15 +1430,18 @@ $('sync-oneclick').addEventListener('click', async function () {
 
 function renderPreview(jobId, result) {
   previewJobId = jobId;
-  // 記下這輪預覽與當時的表單組合（還原時比對）；applyJobId 由 apply 送出处另寫，不動。
+  // 記下這輪預覽與當時的表單組合（還原時比對）。新一輪預覽＝上一輪套用紀錄作廢
+  // （applyJobId 清空，按鈕回到可執行的新輪）。
+  const snapPatch = { previewJobId: jobId, applyJobId: null };
   // 續追（重整後 reattach 的預覽 Done）時表單可能還沒被「上次設定」回填：
   // 空表單別覆寫快照，寧可保留舊值讓 restoreSyncFlow 的比對自行把關。
-  const snapPatch = { previewJobId: jobId };
   const snapSrc = $('sync-src').value.trim();
   const snapDsts = dstRowPairs().map(function (p) { return p.path; });
   if (snapSrc) snapPatch.src = snapSrc;
   if (snapDsts.length) snapPatch.dsts = snapDsts;
   saveFlowSnapshot(snapPatch);
+  // 一鍵意圖存活＋開關開啟＋表單未變：排程自動接續（進行中的 oneclick 自己會接套用，不重複）
+  maybeOneclickResume();
   $('sync-preview-box').classList.remove('hidden');
   const perDst = result.perDst || [];
   let skipTotal = 0;
@@ -1461,7 +1537,8 @@ $('sync-apply').addEventListener('click', async function () {
   const ab = {
     jobId: previewJobId,
     forceOrigin: force,
-    dstList: dstRowPairs().map(function (p) { return p.path; })
+    dstList: dstRowPairs().map(function (p) { return p.path; }),
+    headsPrefix: $('sync-heads-prefix').value.trim()   // 與預覽時不一致會 planStale（plan 的 To 依預覽命名空間算）
   };
   if (subsListReady()) ab.submodules = checkedSubPaths();
   setJobBadge('等待指令中', 'busy');   // 送出前先離開上輪終態（與 help 的徽章說明一致）
@@ -1477,7 +1554,9 @@ $('sync-apply').addEventListener('click', async function () {
   }
   if (r.status === 400 && r.json && r.json.error === 'planStale') {
     setJobBadge('待機', 'idle');
-    alert('目的 Repo 清單或 Submodule 勾選與預覽時不一致，請重新預覽。');
+    alert(r.json.reason === 'headsPrefix'
+      ? '備份命名空間與預覽時不一致，請重新預覽。'
+      : '目的 Repo 清單或 Submodule 勾選與預覽時不一致，請重新預覽。');
     previewJobId = null;
     $('sync-apply').disabled = true;
     return;
@@ -1485,6 +1564,7 @@ $('sync-apply').addEventListener('click', async function () {
   if (!r.json || !r.json.jobId) { setJobBadge('待機', 'idle'); alert(r.text || '啟動同步失敗'); return; }
   $('sync-apply').disabled = true;
   saveFlowSnapshot({ applyJobId: r.json.jobId });   // 記下這輪套用：重整後可回復「進行中／已套用」狀態
+  clearOneclickIntent();   // 手動套用＝同一組合已自行執行：一鍵意圖除役，避免自動重掃後又接續一鍵
   watchJob(r.json.jobId);
 });
 
@@ -1626,6 +1706,7 @@ function collectProfileState() {
   return {
     sync: { src: $('sync-src').value.trim(), dsts: dsts,
             origin: $('sync-origin').checked, heads: $('sync-heads').checked, recurse: $('sync-recurse').checked,
+            headsPrefix: $('sync-heads-prefix').value.trim(), autoResume: $('sync-auto-resume-cb').checked,
             forceAlways: $('sync-force-always-cb').checked,
             // 清單尚未建立時存 null：此時 checkedSubPaths() 必為空，存成 [] 會在還原時誤清勾選
             subs: subsListReady() ? checkedSubPaths() : null },
@@ -1650,6 +1731,8 @@ function applyProfileStateInner(st) {
   profileSet($('sync-origin'), s.origin !== false);
   profileSet($('sync-heads'), !!s.heads);
   profileSet($('sync-recurse'), s.recurse !== false);
+  profileSet($('sync-heads-prefix'), s.headsPrefix || '');
+  profileSet($('sync-auto-resume-cb'), !!s.autoResume);
   profileSet($('sync-force-always-cb'), !!s.forceAlways);
   pendingProfileSubs = Array.isArray(s.subs) ? s.subs.slice() : null;
   profileSet($('fetch-a'), f.a);
@@ -1672,6 +1755,13 @@ function profileAutoValidate() {
     const el = $(id);
     if (el._vb && el.value.trim()) vbValidate(el);
   });
+  // 目的列也要自動亮燈：同步流程的重整還原要等「來源＋所有目的列」驗證到終態，
+  // 少了這步 dst 燈永遠停在 empty，還原只能等 30 秒兜底（使用者看到的就是沒反應）。
+  // 用 batchValidating 壓住「dst 與 src 同路徑」的逐條彈窗（紅燈仍照標）。
+  batchValidating = true;
+  try {
+    dstRowsWithInputs().forEach(function (r) { if (r.input._vb) vbValidate(r.input); });
+  } finally { batchValidating = false; }
 }
 
 // ---- 設定檔彈出面板（分頁列「設定檔」按鈕開啟）----
@@ -1805,8 +1895,8 @@ function scheduleSaveLast() {
     apiPost('/api/profiles/last', { data: collectProfileState() }).catch(function () { });
   }, 1000);
 }
-const PROFILE_INPUT_IDS = ['sync-src', 'fetch-a', 'fetch-b', 'wt-source', 'wt-parent', 'wt-folder', 'wt-branch', 'wt-start'];
-const PROFILE_CHECK_IDS = ['sync-origin', 'sync-heads', 'sync-recurse', 'sync-force-always-cb', 'fetch-prune', 'fetch-recurse'];
+const PROFILE_INPUT_IDS = ['sync-src', 'sync-heads-prefix', 'fetch-a', 'fetch-b', 'wt-source', 'wt-parent', 'wt-folder', 'wt-branch', 'wt-start'];
+const PROFILE_CHECK_IDS = ['sync-origin', 'sync-heads', 'sync-recurse', 'sync-force-always-cb', 'sync-auto-resume-cb', 'fetch-prune', 'fetch-recurse'];
 function inProfileField(t) {
   if (!t || !t.id) return false;
   if (PROFILE_INPUT_IDS.indexOf(t.id) >= 0 || PROFILE_CHECK_IDS.indexOf(t.id) >= 0) return true;
@@ -1840,6 +1930,9 @@ window.addEventListener('pagehide', function () {
       applyProfileState(j.data);
       profileHint('已還原上次設定');
       profileAutoValidate();
+      // 「上次設定」回填完成是自動接續的另一個評估點：reattach 的 renderPreview
+      // 可能先於這裡跑（當時表單是空的），補這一次才不會漏接。
+      maybeOneclickResume();
     }
   } catch (e) { /* 伺服器未回應：維持空表單 */ }
 })();
@@ -1870,7 +1963,8 @@ window.addEventListener('pagehide', function () {
 // 等「上次設定」把表單填好、且來源與所有目的列驗證燈都到終態（或 30 秒逾時兜底）後，
 // 比對表單與流程快照：一致就以服務端仍存活的預覽 job 重現預覽表格，並依套用 job
 // 狀態決定按鈕（進行中／已套用／失敗都維持停用）。刻意不自動續送 apply——重整不該
-// 讓同步自己跑起來，使用者永遠是在回復好的畫面上親按下一個動作。
+// 讓同步自己跑起來；「一鍵同步中斷」的自動接續由獨立意圖 key 與 maybeOneclickResume
+// 把關（見上方意圖區塊），不在這裡處理。
 (function restoreSyncFlow() {
   let snap = null;
   try { snap = JSON.parse(localStorage.getItem(FLOW_STORAGE_KEY) || 'null'); } catch (e) { clearFlowSnapshot(); return; }
@@ -1940,3 +2034,66 @@ window.addEventListener('pagehide', function () {
     doRestore();
   }, 600);
 })();
+
+// ---------- 一鍵同步的重整自動接續 ----------
+// 判準全在獨立意圖 key（見上方 readOneclickIntent 區塊）：意圖存活（未套用、
+// 10 分鐘內）＋開關開啟＋表單組合與意圖一致＋驗證全綠，才自動觸發「一鍵同步」
+// 按鈕接完整輪——複用現有流程（補驗證、預覽、planStale 防護、origin 不同的
+// 確認彈窗一樣會跑，不會硬同步）。評估點：renderPreview 與「上次設定」還原完成。
+function syncFormsAllOk() {
+  const s0 = $('sync-src')._vb;
+  if (!s0 || s0.status !== 'ok') return false;
+  const rows = dstRowsWithInputs();
+  if (!rows.length) return false;
+  return rows.every(function (r) { const s = r.input._vb; return s && s.status === 'ok'; });
+}
+// ---------- 套用完成後自動重掃預覽 ----------
+// 表格尚未就位時（重整還原中）先等 previewJobId 出現再掃，避免跟 doRestore 打架；
+// 一鍵流程自己會掃（finishJob 已排除），這裡只服務手動套用與重整續追兩個場景。
+let autoRepreviewTimer = null;
+function scheduleAutoRepreview() {
+  if (previewJobId != null && !oneclickRunning) { void startPreviewJob(true); return; }
+  if (autoRepreviewTimer) clearInterval(autoRepreviewTimer);
+  let tries = 0;
+  autoRepreviewTimer = setInterval(function () {
+    tries++;
+    if (oneclickRunning) { clearInterval(autoRepreviewTimer); autoRepreviewTimer = null; return; }   // 使用者改跑一鍵：該流程自己掃
+    if (previewJobId != null) {
+      clearInterval(autoRepreviewTimer); autoRepreviewTimer = null;
+      void startPreviewJob(true);
+      return;
+    }
+    if (tries > 25) { clearInterval(autoRepreviewTimer); autoRepreviewTimer = null; }   // 15 秒內表格沒還原（無快照/放棄還原）：不掃
+  }, 600);
+}
+let oneclickResumeTimer = null;
+function scheduleOneclickResume() {
+  if (oneclickResumeTimer) clearInterval(oneclickResumeTimer);
+  const jobIdAtRender = previewJobId;   // 期間重新預覽/作廢就放棄（新預覽 Done 會再評估一次）
+  let tries = 0;
+  oneclickResumeTimer = setInterval(function () {
+    tries++;
+    if (oneclickRunning || previewJobId !== jobIdAtRender || !$('sync-auto-resume-cb').checked) {
+      clearInterval(oneclickResumeTimer); oneclickResumeTimer = null; return;
+    }
+    // 觸發前再確認一次：意圖仍存活（未被本輪套用、未過 TTL）且表單組合未變，
+    // 避免等待期間使用者改路徑或別的標籤頁已套用，過期意圖變成延遲炸彈。
+    const it = readOneclickIntent();
+    if (!it) { clearInterval(oneclickResumeTimer); oneclickResumeTimer = null; return; }
+    if (!formMatchesIntent(it)) {
+      clearOneclickIntent();   // 表單已改：這輪接續語意不成立
+      clearInterval(oneclickResumeTimer); oneclickResumeTimer = null;
+      return;
+    }
+    if (syncFormsAllOk()) {
+      clearInterval(oneclickResumeTimer); oneclickResumeTimer = null;
+      profileHint('自動接續同步…');
+      $('sync-oneclick').click();
+      return;
+    }
+    if (tries > 50) {   // 30 秒驗證仍不綠：放棄自動接續並除役意圖，留給手動
+      clearOneclickIntent();
+      clearInterval(oneclickResumeTimer); oneclickResumeTimer = null;
+    }
+  }, 600);
+}

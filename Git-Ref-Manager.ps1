@@ -144,8 +144,17 @@ function Run-SyncLocalRefs {
     $dsts += Ask-ExtraDst
     $includeOrigin = Confirm-Yes '同步 refs/remotes/origin/* 嗎？'
     $includeHeads  = Confirm-Yes '備份 A 的本地 Branch 到目的端的 refs/sync/source-heads/* 嗎？'
+    $headsPrefix = ''
+    if ($includeHeads) {
+        while ($true) {
+            $t = Read-Host '備份目標命名空間（Enter＝預設 refs/sync/source-heads）'
+            try { $headsPrefix = Test-RefPrefixFormat $t; break }
+            catch { Write-Warning $_.Exception.Message }
+        }
+        if ($headsPrefix) { Write-Host "本地 Branch 將備份到 $headsPrefix/*" -ForegroundColor Cyan }
+    }
     $recurse = Confirm-Yes '也同步所有已初始化的 Submodule（包含巢狀）嗎？'
-    $built = Build-SyncPairs $src $dsts @{ IncludeOrigin = $includeOrigin; IncludeHeads = $includeHeads; Recurse = $recurse }
+    $built = Build-SyncPairs $src $dsts @{ IncludeOrigin = $includeOrigin; IncludeHeads = $includeHeads; Recurse = $recurse; HeadsPrefix = $headsPrefix }
     $pairs = $built.Pairs; $dead = $built.Dead
     if ($pairs.Count -eq 0) { Write-Warning '沒有可用的目的 Repo。'; return }
     $mismatch = @($pairs | Where-Object { $_.Plan.OriginMismatch })
@@ -188,6 +197,7 @@ function Run-AutoSync($srcArg, $dstArgList, $assumeYes) {
         $dsts += (Choose-Repo '選擇目的 Repo B（第 1 個）')
         $dsts += Ask-ExtraDst
     }
+    # 排程/Auto 模式固定採預設備份命名空間（refs/sync/source-heads）；要自訂請用互動選單 1
     $built = Build-SyncPairs $src $dsts @{ IncludeOrigin = $true; IncludeHeads = [bool]$BackupHeads; Recurse = $true }
     $pairs = $built.Pairs; $dead = $built.Dead
     if ($pairs.Count -eq 0) { throw '沒有可用的目的 Repo。' }

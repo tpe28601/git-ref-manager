@@ -68,7 +68,7 @@
 
     <div class="opts">
       <label class="chk"><input type="checkbox" id="sync-origin" checked> 同步 refs/remotes/origin/*</label>
-      <label class="chk"><input type="checkbox" id="sync-heads"> 備份本地 Branch -> refs/sync/source-heads/*</label>
+      <label class="chk"><input type="checkbox" id="sync-heads"> 備份本地 Branch -> <input type="text" id="sync-heads-prefix" class="prefix-input" placeholder="refs/sync/source-heads" spellcheck="false" autocomplete="off" title="備份到目的端的 ref 命名空間（分支會寫成 命名空間/分支名）；空白＝預設 refs/sync/source-heads"></label>
       <label class="chk"><input type="checkbox" id="sync-recurse" checked> 遞迴處理已初始化的 Submodule</label>
     </div>
 
@@ -87,6 +87,7 @@
       <button id="sync-preview" class="btn secondary">預覽差異</button>
       <button id="sync-oneclick" class="btn primary" title="自動驗證 Repo、預覽差異，確認後一次套用">一鍵同步</button>
       <label id="sync-force-always" class="chk" title="預先同意：目的 Repo 的 origin URL 與 A 不同時仍直接執行（forceOrigin），一鍵同步不再彈窗確認"><input type="checkbox" id="sync-force-always-cb"> force（origin 不同仍執行）</label>
+      <label id="sync-auto-resume" class="chk" title="重整頁面後，若上一輪「一鍵同步」尚未送出套用：自動還原畫面並接續執行（origin 不同時仍會彈窗確認，不會硬同步）"><input type="checkbox" id="sync-auto-resume-cb"> 自動接續同步</label>
     </div>
 
     <div id="sync-preview-box" class="panel hidden">
@@ -235,24 +236,39 @@
       <button id="help-close" class="icon-btn" title="關閉"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
     </div>
     <div id="help-sync" class="help-body hidden">
-      <h4>本地同步（Repo A -> Repo B）</h4>
+      <h4>執行原則</h4>
       <ul>
-        <li>只做<b>本地 Ref 複製</b>：不 push、不刪 ref、不動工作目錄與 HEAD。</li>
-        <li>同步範圍看勾選：<code>refs/remotes/origin/*</code>、本地 Branch（備份到 <code>refs/sync/source-heads/*</code>）、Submodule 遞迴。</li>
-        <li>兩段式：「預覽差異」-> 預覽結果內「執行同步」；改過選項要重新預覽。</li>
-        <li>預覽結果<b>預設全部收合</b>：點目的 Repo 標題列看明細，合計列有「全部收合／全部展開」。</li>
-        <li><b>一鍵同步</b>：自動補驗證＋預覽，有差異直接套用。</li>
+        <li>只做本地 Ref 複製：不 push、不刪 ref、不動工作目錄與 HEAD。</li>
+        <li>同步範圍看勾選：<code>refs/remotes/origin/*</code>、本地 Branch 備份、Submodule 遞迴。</li>
+        <li>Branch 備份寫入勾選框旁輸入的命名空間（預設 <code>refs/sync/source-heads/*</code>）；換命名空間後舊路徑的備份不再更新、也不會被刪除。</li>
+      </ul>
+      <h4>兩種執行方式</h4>
+      <ul>
+        <li>兩段式：「預覽差異」→ 檢查結果 →「執行同步」；改過路徑、勾選或命名空間都要重新預覽。</li>
+        <li>一鍵同步：自動補驗證＋預覽，有差異直接套用（只需確認一次）。</li>
+        <li>套用完成後會自動重掃一輪預覽，表格直接顯示同步後的最新狀態。</li>
+      </ul>
+      <h4>防護與衝突</h4>
+      <ul>
+        <li>衝突（D/F、大小寫重複）一律自動略過並回報，不硬覆蓋；大小寫重複每次預覽都會重現，屬正常。</li>
+        <li>目的 Repo 不能與來源 A 同路徑；目的列彼此重複者標紅旗，需刪列或改路徑。</li>
+        <li>A 與 B 的 origin URL 不同時<b>要勾 forceOrigin 才執行</b>；「一鍵同步」右側 force 勾選＝預先同意、不再彈窗。</li>
+      </ul>
+      <h4>畫面解讀</h4>
+      <ul>
         <li>驗證燈：綠勾＝通過（點開看分支／origin 明細）、紅叉＝失敗；Enter＝強制重驗。</li>
-        <li><b>A 與 B 不能同路徑</b>：與來源相同會彈窗提示並擋下；目的列彼此重複路徑者標記紅旗，需刪列或改路徑。</li>
-        <li>衝突（D/F、大小寫重複）一律<b>自動略過並回報</b>，不硬覆蓋；大小寫重複每次預覽都會重現，屬正常。</li>
-        <li>A 與 B 的 origin 不同時要勾 forceOrigin 才執行；「一鍵同步」右側 force 勾選＝預先同意、不再彈窗。</li>
-        <li>Submodule 清單：來源驗證通過後出現，預設收合並顯示「已選／可處理／略過」；<b>增減或更換目的 Repo 立即以已驗證資料重組清單</b>，不會重複驗證；送出前另有輕量比對，工具外動過初始化會自動刷新。「從 A 初始化」（單一目的）以 A 的本機複製初始化 B 側，離線可用。</li>
-        <li><b>設定檔</b>（分頁列按鈕）：儲存／載入三個分頁的設定；重新開頁自動還原上次設定。</li>
-        <li><b>工作面板</b>不自動展開，看徽章：待機 -> 等待指令中 -> 進行中 -> 完成／失敗；收合時工作結束會亮小圓點。<b>進行中也能看歷史紀錄</b>（即時進度在背景更新）。</li>
+        <li>預覽結果預設全部收合：點目的 Repo 標題列看明細，合計列有「全部收合／全部展開」。</li>
+        <li>Submodule 清單：來源驗證通過後出現，預設收合顯示「已選／可處理／略過」；增減目的 Repo 即時重組、工具外動過初始化會自動刷新。「從 A 初始化」（僅單一目的）以 A 的本機複製初始化 B 側，離線可用。</li>
+        <li>工作面板不自動展開，看徽章：待機 → 等待指令中 → 進行中 → 完成／失敗；收合時工作結束亮小圓點。進行中也能看歷史紀錄（即時進度背景更新）。</li>
+      </ul>
+      <h4>重整與重開頁</h4>
+      <ul>
+        <li>套用在伺服器執行，<b>重整不會中斷</b>；進行中的工作自動續追，重開頁會還原上次設定、重亮驗證燈、還原預覽表格與按鈕狀態。</li>
+        <li>勾選「自動接續同步」（預設關）：一鍵進行中重整且尚未送套用時，驗證全綠後自動接續（origin 不同仍彈窗確認）。</li>
+        <li>設定檔（分頁列按鈕）：儲存／載入三個分頁的設定；重新開頁自動還原上次設定。</li>
       </ul>
     </div>
     <div id="help-fetch" class="help-body hidden">
-      <h4>Fetch Origin</h4>
       <ul>
         <li>對 Repo 執行 <code>git fetch origin</code>，<b>會實際連遠端</b>，需二次確認。</li>
         <li>B 可留空＝只 Fetch A；B 與 A 同一 Repository（Worktree）時自動略過。</li>
@@ -261,7 +277,6 @@
       </ul>
     </div>
     <div id="help-worktree" class="help-body hidden">
-      <h4>Worktree</h4>
       <ul>
         <li>在上層資料夾以 <code>git worktree add</code> 建新工作目錄並簽出新 Branch（<b>名稱必填</b>）。</li>
         <li>先「檢查」（來源是否為 Repo、目標不存在、Branch 不重複、可寫），全過才能「建立」。</li>

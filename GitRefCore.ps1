@@ -239,13 +239,46 @@ function Find-RefConflicts($Updates, $DstNamesSorted, [System.Collections.Generi
     return [pscustomobject]@{ Clean = @($clean); Conflicts = @($conf) }
 }
 
-function Get-RefPairUpdates($Src, $Dst, [string[]]$Namespaces) {
+function Test-RefPrefixFormat([string]$Prefix) {
+    # 驗證並正規化 ref 命名空間前綴（規則比照 git check-ref-format，離線實作）。
+    # 回傳正規化前綴（去首尾 '/'）；空白回傳 ''（呼叫端採預設值）。不合法直接 throw。
+    $p = ([string]$Prefix).Trim()
+    if ([string]::IsNullOrWhiteSpace($p)) { return '' }
+    if ($p -match '[\x00-\x1f\x7f]') { throw "命名空間含控制字元：$p" }
+    if ($p -match '[\s~^:?*\[\]\\]' -or $p.Contains('@{')) { throw "命名空間含非法字元：$p（不支援空白、~ ^ : ? * [ \\ 與 @{）" }
+    if ($p -match '\.\.') { throw "命名空間不能含『..』：$p" }
+    $p = $p.Trim('/')
+    if ([string]::IsNullOrWhiteSpace($p)) { return '' }
+    foreach ($seg in $p.Split('/')) {
+        if (-not $seg) { throw "命名空間不能有空段（連續 //）：$p" }
+        if ($seg.StartsWith('.')) { throw "命名空間段不能以『.』開頭：$p" }
+        if ($seg.EndsWith('.lock') -or $seg.EndsWith('.')) { throw "命名空間段不能以『.』或『.lock』結尾：$p" }
+    }
+    # 保留／危險命名空間：大小寫變體都要擋（Windows 檔案系統不區分大小寫，
+    # 『REFS/HEADS/x』寫進去會直接動到 .git\refs\heads\ 下的真實分支檔案）。
+    $pl = $p.ToLowerInvariant()
+    if ($pl -eq 'head' -or $pl -eq 'refs/heads' -or $pl.StartsWith('refs/heads/')) {
+        throw "命名空間不能是 $p：會直接覆寫目的端的真實分支，請改用 refs/ 下的獨立空間"
+    }
+    if ($pl -eq 'refs/remotes' -or $pl.StartsWith('refs/remotes/') -or $pl -eq 'refs/tags' -or $pl.StartsWith('refs/tags/')) {
+        throw "命名空間 $p 會污染目的端的遠端追蹤 Ref 或標籤，請改用獨立空間"
+    }
+    if ($pl -eq 'refs/bisect' -or $pl.StartsWith('refs/bisect/') -or $pl -eq 'refs/next' -or $pl.StartsWith('refs/next/') -or
+        $pl -eq 'refs/replace' -or $pl.StartsWith('refs/replace/')) {
+        throw "命名空間 $p 為 Git 保留，請改用其他名稱"
+    }
+    return $p
+}
+
+function Get-RefPairUpdates($Src, $Dst, [string[]]$Namespaces, [string]$HeadsPrefix) {
     # 只計算 A->B 需要的 ref 異動（含 D/F 衝突與大小寫衝突預檢），不做任何寫入。
-    # 注意：大小寫必須用 Ordinal 比對；PowerShell 預設 hashtable 不區分大小寫，
+    # HeadsPrefix：refs/heads/* 備份到目的端的命名空間；空白＝預設 refs/sync/source-heads。
+    if ([string]::IsNullOrWhiteSpace($HeadsPrefix)) { $HeadsPrefix = 'refs/sync/source-heads' }
+    # 大小寫必須用 Ordinal 比對；PowerShell 預設 hashtable 不區分大小寫，
     # 會讓 A 端「僅大小寫不同」的重複 Ref（如 Feature/feature）永遠無法收斂。
     $srcRefs = @(Get-Refs $Src $Namespaces)
     $dstExact = [System.Collections.Generic.Dictionary[string,string]]::new([System.StringComparer]::Ordinal)
-    foreach ($r in @(Get-Refs $Dst @('refs/remotes/origin','refs/sync/source-heads'))) {
+    foreach ($r in @(Get-Refs $Dst @('refs/remotes/origin', $HeadsPrefix))) {
         if (-not $dstExact.ContainsKey($r.Name)) { $dstExact[$r.Name] = $r.ObjectId }
     }
     # 排序與 Find-RefConflicts 的 BinarySearch 必須用同一個 comparer（Ordinal）。
@@ -263,7 +296,7 @@ function Get-RefPairUpdates($Src, $Dst, [string[]]$Namespaces) {
         if (-not [string]::IsNullOrEmpty($r.Symbolic)) { continue }   # 略過 symbolic ref（如 origin/HEAD）
         $to = $r.Name
         if ($r.Name.StartsWith('refs/heads/')) {
-            $to = 'refs/sync/source-heads/' + $r.Name.Substring('refs/heads/'.Length)
+            $to = $HeadsPrefix + '/' + $r.Name.Substring('refs/heads/'.Length)
         }
         if ($dstExact.ContainsKey($to)) {
             if ($dstExact[$to] -eq $r.ObjectId) { continue }
@@ -322,7 +355,8 @@ function Invoke-RefPairSync($Src, $Dst, $Updates, [scriptblock]$OnLog) {
 }
 
 function New-SyncPlan($Src, $Dst, $Options, [scriptblock]$OnLog) {
-    # Options: @{ IncludeOrigin=$bool; IncludeHeads=$bool; Recurse=$bool }
+    # Options: @{ IncludeOrigin=$bool; IncludeHeads=$bool; Recurse=$bool; HeadsPrefix=$string（空白＝預設） }
+    $headsPrefix = [string]$Options.HeadsPrefix
     $fatal = $null
     $rootA = try { Get-GitRoot $Src } catch { $fatal = "A：$($_.Exception.Message)" }
     $rootB = try { Get-GitRoot $Dst } catch { if (-not $fatal) { $fatal = "B：$($_.Exception.Message)" } }
@@ -343,7 +377,7 @@ function New-SyncPlan($Src, $Dst, $Options, [scriptblock]$OnLog) {
     $skipped = @()
     $planLog = if ($OnLog) { [scriptblock]::Create('param($m) & $OnLog $m') } else { $null }
 
-    $m = Get-RefPairUpdates $rootA $rootB $namespaces
+    $m = Get-RefPairUpdates $rootA $rootB $namespaces $headsPrefix
     $entries += [pscustomobject]@{ Label = '主 Repo'; Src = $rootA; Dst = $rootB; UpdateList = $m.UpdateList; Add = $m.Add; Update = $m.Update; Conflicts = @($m.Conflicts) }
     if ($OnLog) { & $OnLog ("主 Repo：新增 {0}、更新 {1}、衝突略過 {2}" -f $m.Add, $m.Update, @($m.Conflicts).Count) }
 
@@ -365,7 +399,7 @@ function New-SyncPlan($Src, $Dst, $Options, [scriptblock]$OnLog) {
             $ub = Get-OriginUrl $subB
             if ($ua -ne $ub) { $skipped += [pscustomobject]@{ Path = $p; Reason = "兩邊 origin URL 不同（$ua / $ub），避免誤覆蓋" }; continue }
             if ((Get-CommonDir $subA) -eq (Get-CommonDir $subB)) { $skipped += [pscustomobject]@{ Path = $p; Reason = '兩邊共用同一個 Submodule Repo，不需同步' }; continue }
-            $sm = Get-RefPairUpdates $subA $subB $namespaces
+            $sm = Get-RefPairUpdates $subA $subB $namespaces $headsPrefix
             $entries += [pscustomobject]@{ Label = "Submodule: $p"; Src = $subA; Dst = $subB; UpdateList = $sm.UpdateList; Add = $sm.Add; Update = $sm.Update; Conflicts = @($sm.Conflicts) }
             if ($OnLog) { & $OnLog ("[$p] 新增 {0}、更新 {1}、衝突略過 {2}" -f $sm.Add, $sm.Update, @($sm.Conflicts).Count) }
         }

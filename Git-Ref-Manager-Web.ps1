@@ -860,6 +860,12 @@ function Route-Request($req, $ctx) {
             if ($dstArr.Count -eq 0) { Send-Text $ctx 400 '未指定任何目的 Repo'; return }
             $includeOrigin = [bool]$b.includeOrigin
             $includeHeads = [bool]$b.includeHeads
+            # 本地 Branch 備份命名空間：空白＝core 預設 refs/sync/source-heads；非法直接 400（不進 job）
+            $headsPrefix = ''
+            if ($b.PSObject.Properties.Name -contains 'headsPrefix') {
+                try { $headsPrefix = Test-RefPrefixFormat ([string]$b.headsPrefix) }
+                catch { Send-Text $ctx 400 $_.Exception.Message; return }
+            }
             $recurse = [bool]$b.recurse
             # Submodule 勾選過濾：body 有 submodules 陣列 -> 只處理被勾選者；沒有該欄位 -> 全部（CLI/舊行為）
             $hasSubFilter = ($b.PSObject.Properties.Name -contains 'submodules')
@@ -876,7 +882,7 @@ function Route-Request($req, $ctx) {
             # 注意：preview 不接受 forceOrigin（那是 apply 階段的事），Meta 不記此欄
             $j.Meta = [ordered]@{ src = $src; dsts = @($dstArr) }
             $j.Total = 1   # init 步驟；submodule worker 由 init 動態追加
-            Job-Log $j "預覽：$src -> $($dstArr.Count) 個目的 Repo（origin=$includeOrigin heads=$includeHeads submodule=$recurse$(if ($hasSubFilter) { " 勾選=$($subSet.Count)" }))"
+            Job-Log $j "預覽：$src -> $($dstArr.Count) 個目的 Repo（origin=$includeOrigin heads=$includeHeads$(if ($includeHeads) { if ($headsPrefix) { "->$headsPrefix" } else { '->refs/sync/source-heads' } }) submodule=$recurse$(if ($hasSubFilter) { " 勾選=$($subSet.Count)" }))"
             # $box 為各步驟共享的可變容器（閉包捕獲 hashtable 是捕獲參考）。
             # 注意：所有閉包一律在 route 層建立；PS 5.1 在閉包內再 GetNewClosure 不可靠。
             $box = @{ Src = $src; DstArr = $dstArr; Namespaces = @(); Queue = (New-Object System.Collections.Queue); Worker = $null; Fin = $null; PerDst = @{} }
@@ -911,7 +917,7 @@ function Route-Request($req, $ctx) {
                     $pd.RootB = $rootB; $pd.OriginB = $urlB
                     $pd.OriginMismatch = ($includeOrigin -and ($urlA -ne $urlB))
                     if ($pd.OriginMismatch) { Job-Log $j "$tag 兩邊 origin 不同（A: $urlA / B: $urlB），執行需 forceOrigin" }
-                    $m = Get-RefPairUpdates $rootA $rootB $box.Namespaces
+                    $m = Get-RefPairUpdates $rootA $rootB $box.Namespaces $headsPrefix
                     $pd.Entries.Add([pscustomobject]@{ Label = '主 Repo'; Src = $rootA; Dst = $rootB; UpdateList = $m.UpdateList; Add = $m.Add; Update = $m.Update; Conflicts = @($m.Conflicts) }) | Out-Null
                     Job-Log $j ("$tag 主 Repo：新增 {0}、更新 {1}、衝突略過 {2}" -f $m.Add, $m.Update, @($m.Conflicts).Count)
                     if (-not $recurse) { continue }
@@ -948,7 +954,7 @@ function Route-Request($req, $ctx) {
             $worker = {
                 param($j)
                 $pair = $box.Queue.Dequeue()
-                $sm = Get-RefPairUpdates $pair.SubA $pair.SubB $box.Namespaces
+                $sm = Get-RefPairUpdates $pair.SubA $pair.SubB $box.Namespaces $headsPrefix
                 $box.PerDst[[int]$pair.DstIdx].Entries.Add([pscustomobject]@{ Label = "Submodule: $($pair.Path)"; Src = $pair.SubA; Dst = $pair.SubB; UpdateList = $sm.UpdateList; Add = $sm.Add; Update = $sm.Update; Conflicts = @($sm.Conflicts) }) | Out-Null
                 Job-Log $j ("[B$($pair.DstIdx)] [$($pair.Path)] 新增 {0}、更新 {1}、衝突略過 {2}" -f $sm.Add, $sm.Update, @($sm.Conflicts).Count)
                 $j.Done++
@@ -1004,6 +1010,7 @@ function Route-Request($req, $ctx) {
                         PerDst = $perDstFull
                         SubFilterKey = $subFilterKey
                         DstListKey = $dstListKey
+                        HeadsPrefixKey = $headsPrefix
                         TotalAdd = $gAdd; TotalUpdate = $gUpd; TotalConflict = $gConf
                     })
                     $j.Result = [pscustomobject]@{
@@ -1037,6 +1044,14 @@ function Route-Request($req, $ctx) {
             if ($b.PSObject.Properties.Name -contains 'dstList' -and $null -ne $p.PSObject.Properties['DstListKey'] -and $null -ne $p.DstListKey) {
                 $dstNow = @(@($b.dstList | ForEach-Object { ([string]$_).Trim().ToLowerInvariant().TrimEnd('\') }) | Where-Object { $_ } | Sort-Object) -join "`n"
                 if ($dstNow -cne $p.DstListKey) { Send-JsonRaw $ctx ([pscustomobject]@{ error = 'planStale' }) 400; return }
+            }
+            # 防護：備份命名空間與預覽時不一致 -> 請重新預覽（plan 內的 To 是用預覽時的命名空間算的）
+            if ($b.PSObject.Properties.Name -contains 'headsPrefix') {
+                $hpNow = ''
+                try { $hpNow = Test-RefPrefixFormat ([string]$b.headsPrefix) }
+                catch { Send-Text $ctx 400 $_.Exception.Message; return }
+                $hpPlan = if ($null -ne $p.PSObject.Properties['HeadsPrefixKey']) { [string]$p.HeadsPrefixKey } else { '' }
+                if ($hpNow -cne $hpPlan) { Send-JsonRaw $ctx ([pscustomobject]@{ error = 'planStale'; reason = 'headsPrefix' }) 400; return }
             }
             # （舊版單 B plan 的相容包裝已移除：Previews 僅存於記憶體，
             #   本版預覽必含 PerDst，舊 plan 不可能存活到升級後的行程）

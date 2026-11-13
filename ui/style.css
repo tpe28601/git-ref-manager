@@ -268,7 +268,8 @@ body.resizing { cursor: ns-resize; user-select: none; }
 /* ---- 分頁功能說明（說明鈕在 tabs 同列） ---- */
 .help-box { width: min(720px, 94vw); }
 .help-body { overflow: auto; padding: 12px 18px; max-height: 60vh; }
-.help-body h4 { margin: 0 0 8px; }
+.help-body h4 { margin: 14px 0 6px; }
+.help-body h4:first-child { margin-top: 0; }
 .help-body ul { margin: 0; padding-left: 20px; }
 .help-body li { margin: 6px 0; line-height: 1.65; }
 .help-body code { font-family: var(--mono); font-size: 12px; background: var(--bg3); padding: 1px 5px; border-radius: 4px; }
@@ -435,6 +436,7 @@ input[type="text"]:hover, .profile-select:hover { border-color: color-mix(in srg
 input[type="text"]:focus, .profile-select:focus { outline: none; border-color: var(--tb-accent); box-shadow: var(--tb-focus); }
 .field label { font-size: var(--tb-fs-sm); font-weight: 500; color: var(--tb-muted); margin-bottom: 6px; }
 .chk input[type="checkbox"] { accent-color: var(--tb-accent); width: 16px; height: 16px; }
+.chk .prefix-input { width: 250px; margin-left: 2px; font-family: Consolas, "Courier New", monospace; font-size: 12px; }
 .vb { right: 46px; }
 
 /* 卡片類容器 */
