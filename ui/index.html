@@ -36,7 +36,7 @@
 </nav>
 
 <!-- ============ 設定檔彈出面板（由分頁列「設定檔」按鈕開） ============ -->
-<div id="profile-pop" class="profile-pop hidden" role="dialog" aria-label="設定檔">
+<div id="profile-pop" class="profile-pop tb-theme-dialog hidden" role="dialog" aria-label="設定檔">
   <div class="profile-pop-title">設定檔（含三個分頁的路徑、選項與 Submodule 勾選）</div>
   <select id="profile-select" class="profile-select"><option value="">—— 選擇設定檔 ——</option></select>
   <div class="profile-pop-btns">
@@ -46,16 +46,15 @@
   </div>
   <span id="profile-hint" class="profile-hint"></span>
 </div>
-<div id="profile-toast" class="profile-toast hidden" role="status"></div>
 
 <main>
   <!-- ============ 本地同步 ============ -->
   <section id="tab-sync" class="tab active">
-    <div class="repo-grid">
+    <div class="repo-grid tb-card">
       <div class="field">
         <label>Repo A（來源）</label>
         <div class="input-row">
-          <input id="sync-src" type="text" placeholder="例：D:\MyProject">
+          <input class="tb-theme-control" id="sync-src" type="text" placeholder="例：D:\MyProject">
           <button class="icon-btn browse-btn" data-target="sync-src" title="瀏覽資料夾"><svg class="ic" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg></button>
         </div>
         <div id="sync-src-summary" class="repo-summary"></div>
@@ -69,11 +68,11 @@
 
     <div class="opts">
       <label class="chk"><input type="checkbox" id="sync-origin" checked> 同步 refs/remotes/origin/*</label>
-      <label class="chk"><input type="checkbox" id="sync-heads"> 備份本地 Branch -> <input type="text" id="sync-heads-prefix" class="prefix-input" placeholder="refs/sync/source-heads" spellcheck="false" autocomplete="off" title="備份到目的端的 ref 命名空間（分支會寫成 命名空間/分支名）；空白＝預設 refs/sync/source-heads"></label>
+      <label class="chk"><input type="checkbox" id="sync-heads"> 備份本地 Branch -> <input type="text" id="sync-heads-prefix" class="tb-theme-control prefix-input" placeholder="refs/sync/source-heads" spellcheck="false" autocomplete="off" title="備份到目的端的 ref 命名空間（分支會寫成 命名空間/分支名）；空白＝預設 refs/sync/source-heads"></label>
       <label class="chk"><input type="checkbox" id="sync-recurse" checked> 遞迴處理已初始化的 Submodule</label>
     </div>
 
-    <details id="sync-subs-details" class="subs-details hidden">
+    <details id="sync-subs-details" class="subs-details tb-theme-panel hidden">
       <summary><svg class="ic" viewBox="0 0 24 24"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg> Submodule 勾選<span id="subs-sum-count" class="muted">（來源 Repo 驗證通過後出現清單；未勾選者會被略過）</span></summary>
       <div id="subs-toolbar" class="subs-toolbar hidden">
         <button id="subs-all" class="btn small secondary" type="button">全選</button>
@@ -106,11 +105,11 @@
 
   <!-- ============ Fetch Origin ============ -->
   <section id="tab-fetch" class="tab">
-    <div class="repo-grid">
+    <div class="repo-grid tb-card">
       <div class="field">
         <label>Repo A</label>
         <div class="input-row">
-          <input id="fetch-a" type="text" placeholder="例：D:\MyProject">
+          <input class="tb-theme-control" id="fetch-a" type="text" placeholder="例：D:\MyProject">
           <button class="icon-btn browse-btn" data-target="fetch-a" title="瀏覽資料夾"><svg class="ic" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg></button>
         </div>
         <div id="fetch-a-summary" class="repo-summary"></div>
@@ -118,7 +117,7 @@
       <div class="field">
         <label>Repo B（可留空＝只 Fetch A）</label>
         <div class="input-row">
-          <input id="fetch-b" type="text" placeholder="例：D:\MyProject_2">
+          <input class="tb-theme-control" id="fetch-b" type="text" placeholder="例：D:\MyProject_2">
           <button class="icon-btn browse-btn" data-target="fetch-b" title="瀏覽資料夾"><svg class="ic" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg></button>
         </div>
         <div id="fetch-b-summary" class="repo-summary"></div>
@@ -143,11 +142,11 @@
 
   <!-- ============ Worktree ============ -->
   <section id="tab-worktree" class="tab">
-    <div class="repo-grid">
+    <div class="repo-grid tb-card">
       <div class="field">
         <label>來源 Repo</label>
         <div class="input-row">
-          <input id="wt-source" type="text" placeholder="例：D:\MyProject_2">
+          <input class="tb-theme-control" id="wt-source" type="text" placeholder="例：D:\MyProject_2">
           <button class="icon-btn browse-btn" data-target="wt-source" title="瀏覽資料夾"><svg class="ic" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg></button>
         </div>
         <div id="wt-source-summary" class="repo-summary"></div>
@@ -155,7 +154,7 @@
       <div class="field">
         <label>上層資料夾（新 Worktree 建在這裡面）</label>
         <div class="input-row">
-          <input id="wt-parent" type="text" placeholder="例：D:\\">
+          <input class="tb-theme-control" id="wt-parent" type="text" placeholder="例：D:\\">
           <button class="icon-btn browse-btn" data-target="wt-parent" data-dirs-only="1" title="瀏覽資料夾"><svg class="ic" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg></button>
         </div>
       </div>
@@ -163,17 +162,17 @@
     <div class="repo-grid">
       <div class="field">
         <label>新資料夾名稱（留空＝來源名稱-worktree）</label>
-        <input id="wt-folder" type="text" placeholder="例：MyProject_2-worktree">
+        <input class="tb-theme-control" id="wt-folder" type="text" placeholder="例：MyProject_2-worktree">
       </div>
       <div class="field">
         <label>新 Branch 名稱（必填）</label>
-        <input id="wt-branch" type="text" placeholder="例：feature/task-001">
+        <input class="tb-theme-control" id="wt-branch" type="text" placeholder="例：feature/task-001">
       </div>
     </div>
     <div class="repo-grid">
       <div class="field">
         <label>起始 Commit / Ref（預設 HEAD）</label>
-        <input id="wt-start" type="text" placeholder="HEAD">
+        <input class="tb-theme-control" id="wt-start" type="text" placeholder="HEAD">
       </div>
     </div>
 
@@ -194,6 +193,7 @@
 <div id="slow-hint" class="hidden" role="status">伺服器正處理前一個操作，排隊中…</div>
 
 <div id="job-panel" class="job-panel tb-theme-panel collapsed">
+  <div id="profile-toast" class="profile-toast tb-toast hidden" role="status"></div>
   <div id="job-resizer" class="job-resizer" title="拖拉調整高度；雙擊還原預設"></div>
   <div class="job-head" id="job-head">
     <span id="job-title">工作面板</span>
@@ -215,7 +215,7 @@
 <!-- 資料夾瀏覽器改用 ui-kit tb-dirpicker.js 共用元件（DOM 由元件動態產生） -->
 
 <!-- ============ 歷史紀錄 ============ -->
-<div id="hist-modal" class="modal hidden">
+<div id="hist-modal" class="modal tb-theme-backdrop hidden">
   <div class="modal-box tb-theme-dialog hist-box">
     <div class="modal-head">
       <span>歷史紀錄（保留最近 100 筆，存放於 job-history.jsonl）</span>
@@ -230,7 +230,7 @@
 </div>
 
 <!-- ============ 功能說明 ============ -->
-<div id="help-modal" class="modal hidden">
+<div id="help-modal" class="modal tb-theme-backdrop hidden">
   <div class="modal-box tb-theme-dialog help-box">
     <div class="modal-head">
       <span id="help-title">功能說明</span>

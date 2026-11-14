@@ -2,7 +2,13 @@
 
 格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)，版本遵循 SemVer。
 
-## [Unreleased]
+## [1.2.7] - 2026-11-15
+
+### 介面
+
+- 同步、Fetch Origin 與 Worktree 的主要表單採用共用卡片，嵌入時跟隨 Hub 玻璃樣式。
+- 「已還原上次設定」通知顯示在工作面板上方，設定檔和歷史視窗採用共用玻璃樣式。
+- 獨立開啟使用石墨深淺色。
 
 ### 變更
 

@@ -1779,7 +1779,7 @@ function profilePopOpen(show) {
 let profileToastTimer = null;
 function profileHint(t) {
   $('profile-hint').textContent = t || '';
-  // 面板關著時（例如開頁自動還原）改用右下角 toast，避免訊息沒人看到
+  // 設定面板關著時（例如開頁自動還原），在工作面板上方顯示提示。
   if (t && $('profile-pop').classList.contains('hidden')) {
     const el = $('profile-toast');
     el.textContent = t;

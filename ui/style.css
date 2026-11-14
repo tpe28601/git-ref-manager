@@ -155,7 +155,12 @@ input[type="text"]:focus { outline: none; border-color: var(--accent); }
 .profile-pop .profile-select { width: 100%; }
 .profile-pop-btns { display: flex; gap: 6px; flex-wrap: wrap; }
 .profile-toast {
-  position: fixed; left: 16px; bottom: 16px; z-index: 90; max-width: 60vw;
+  position: absolute;
+  inset-inline-start: var(--tb-space-4);
+  bottom: calc(100% + var(--tb-space-2));
+  z-index: 90;
+  max-width: min(320px, calc(100% - 2 * var(--tb-space-4)));
+  overflow-wrap: anywhere;
   background: var(--bg2); color: var(--fg); border: 1px solid var(--line); border-radius: 8px;
   padding: 8px 14px; font-size: 13px; box-shadow: 0 8px 22px rgba(0, 0, 0, 0.3);
 }
@@ -213,6 +218,7 @@ input[type="text"]:focus { outline: none; border-color: var(--accent); }
 
 /* ---- Job 面板（正常流，置於 main 之下；見 body App Shell） ---- */
 .job-panel {
+  position: relative;
   flex: none;
   background: var(--bg2); border-top: 1px solid var(--line);
 }
@@ -440,6 +446,8 @@ input[type="text"]:focus, .profile-select:focus { outline: none; border-color: v
 .vb { right: 46px; }
 
 /* 卡片類容器 */
+.repo-grid.tb-card > .field { min-width: 0; }
+.repo-grid.tb-card .input-row > input { min-width: 0; }
 .panel, .subs-details {
   background: var(--tb-surface); border: 1px solid var(--tb-border); border-radius: var(--tb-radius-xl);
   box-shadow: var(--tb-shadow-sm); padding: 14px 16px;
@@ -486,7 +494,11 @@ input[type="text"]:focus, .profile-select:focus { outline: none; border-color: v
 .modal-foot { padding: 12px 16px; gap: 8px; }
 .profile-pop, .profile-toast { background: var(--tb-surface); border-color: var(--tb-border); border-radius: var(--tb-radius-lg); box-shadow: var(--tb-shadow); }
 .profile-pop { animation: tb-pop .15s ease; }
-.profile-toast { border-left: 4px solid var(--tb-accent); animation: tb-slide .18s ease; }
+.profile-toast {
+  background: color-mix(in srgb, var(--tb-surface), var(--tb-bg) 70%);
+  border-left: 4px solid var(--tb-accent);
+  animation: tb-slide .18s ease;
+}
 #slow-hint { background: var(--tb-surface); border-color: var(--tb-warn); color: var(--tb-warn); box-shadow: var(--tb-shadow); }
 .help-body code { background: var(--tb-surface-2); }
 
