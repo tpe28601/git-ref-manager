@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="/ui-kit.css">
 <link rel="stylesheet" href="/style.css">
 <!-- 深淺色／強調色：網址 ?theme=&accent=（Hub 嵌入時帶入）> 本機記憶 > 跟隨系統；?embedded=1 隱藏自己的頂部列 -->
-<script src="/tb-theme.js"></script>
+<script src="/tb-theme.js" data-tb-tool></script>
 <script src="/tb-icons.js"></script>
 <script src="/tb-dirpicker.js"></script>
 </head>
@@ -91,7 +91,7 @@
       <label id="sync-auto-resume" class="chk" title="重整頁面後，若上一輪「一鍵同步」尚未送出套用：自動還原畫面並接續執行（origin 不同時仍會彈窗確認，不會硬同步）"><input type="checkbox" id="sync-auto-resume-cb"> 自動接續同步</label>
     </div>
 
-    <div id="sync-preview-box" class="panel hidden">
+    <div id="sync-preview-box" class="panel tb-theme-panel hidden">
       <div class="totals-row">
         <div id="sync-totals" class="totals"></div>
         <button id="dst-collapse-all" class="btn small secondary hidden" type="button" title="收合或展開所有目的 Repo 的差異明細">全部收合</button>
@@ -181,7 +181,7 @@
       <button id="wt-check" class="btn secondary">檢查</button>
       <button id="wt-create" class="btn primary" disabled>建立 Worktree</button>
     </div>
-    <div id="wt-check-box" class="panel hidden">
+    <div id="wt-check-box" class="panel tb-theme-panel hidden">
       <ul id="wt-check-list" class="checklist"></ul>
       <ul id="wt-warn-list" class="warnlist"></ul>
       <div id="wt-target-line" class="totals"></div>
@@ -193,7 +193,7 @@
 <!-- 請求排隊提示：任一同源 API 超過 1.2 秒未回時顯示（app.js 控制） -->
 <div id="slow-hint" class="hidden" role="status">伺服器正處理前一個操作，排隊中…</div>
 
-<div id="job-panel" class="job-panel collapsed">
+<div id="job-panel" class="job-panel tb-theme-panel collapsed">
   <div id="job-resizer" class="job-resizer" title="拖拉調整高度；雙擊還原預設"></div>
   <div class="job-head" id="job-head">
     <span id="job-title">工作面板</span>
@@ -216,7 +216,7 @@
 
 <!-- ============ 歷史紀錄 ============ -->
 <div id="hist-modal" class="modal hidden">
-  <div class="modal-box hist-box">
+  <div class="modal-box tb-theme-dialog hist-box">
     <div class="modal-head">
       <span>歷史紀錄（保留最近 100 筆，存放於 job-history.jsonl）</span>
       <button id="hist-close" class="icon-btn" title="關閉"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
@@ -231,7 +231,7 @@
 
 <!-- ============ 功能說明 ============ -->
 <div id="help-modal" class="modal hidden">
-  <div class="modal-box help-box">
+  <div class="modal-box tb-theme-dialog help-box">
     <div class="modal-head">
       <span id="help-title">功能說明</span>
       <button id="help-close" class="icon-btn" title="關閉"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
