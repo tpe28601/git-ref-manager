@@ -26,3 +26,6 @@ desktop.ini
 __pycache__/
 *.pyc
 .venv/
+
+/updates/
+/.updates-*.tmp/

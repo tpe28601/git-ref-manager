@@ -1,5 +1,5 @@
 ﻿param(
-    [ValidateSet('Show','Resolve','Open','Check')][string]$Action = 'Show',
+    [ValidateSet('Show','Resolve','Open','Check','Python')][string]$Action = 'Show',
     [ValidatePattern('^[0-9]+\.[0-9]+\.[0-9]+$')][string]$Version
 )
 
@@ -13,21 +13,25 @@ if ($Action -eq 'Open') {
 . (Join-Path $PSScriptRoot 'Tool-Updates.ps1')
 $root = $PSScriptRoot
 $manifest = [IO.File]::ReadAllText((Join-Path $root 'tool.json')) | ConvertFrom-Json
-$data = if ($env:DEVTOOLBOX_DATA) { $env:DEVTOOLBOX_DATA } else { Join-Path $env:LOCALAPPDATA 'DevToolbox' }
-$store = Get-ToolUpdateStore $root (Join-Path $data 'standalone')
-# A copy launched from the version store must keep following that same store.
-$parent = Split-Path $root -Parent
-$candidate = Split-Path $parent -Parent
-$hubRoot = Split-Path $parent -Parent
-if ((Split-Path $parent -Leaf) -eq 'tools' -and
-    (Test-Path -LiteralPath (Join-Path $hubRoot 'hub\Tool-Updates.ps1') -PathType Leaf)) {
-    $store = Get-ToolUpdateStore $hubRoot (Join-Path $data 'dev-toolbox-hub')
+if ($Action -eq 'Python') {
+    Resolve-StandaloneToolPython $root $manifest.id
+    return
 }
-if ((Split-Path $parent -Leaf) -eq $manifest.id -and
-    (Split-Path $root -Leaf) -eq $manifest.version -and
-    (Split-Path $candidate -Leaf) -match '^[A-F0-9]{64}$' -and
-    (Split-Path (Split-Path $candidate -Parent) -Leaf) -eq 'tool-updates') {
-    $store = $candidate
+$store = Get-ToolVersionStore $root $manifest.id $manifest.version
+if (-not $store) {
+    $data = Get-ToolDataRoot
+    $parent = Split-Path -Parent $root
+    $hubRoot = if ($parent) { Split-Path -Parent $parent }
+    if ($hubRoot -and (Split-Path -Leaf $parent) -eq 'tools' -and
+        (Test-Path -LiteralPath (Join-Path $hubRoot 'hub\Tool-Updates.ps1') -PathType Leaf)) {
+        $store = Join-Path $hubRoot 'updates'
+        if (-not [IO.Directory]::Exists($store)) {
+            $store = Get-LegacyHubUpdateStore $hubRoot (Join-Path $data 'dev-toolbox-hub')
+        }
+    } else {
+        $legacy = Get-ToolUpdateStore $root (Join-Path $data 'standalone')
+        $store = Get-PortableUpdateStore $root $legacy $manifest.id $PSCommandPath
+    }
 }
 $active = Resolve-ToolUpdateDir $store $manifest.id $manifest.version $root
 if ($Action -eq 'Resolve') {
@@ -61,6 +65,7 @@ try {
         'build-runner' = @('Run-CLI.bat', 'Run-Web.bat')
         'hlk-viewer' = @('Launch-HLK.ps1', 'HLK-Web.ps1')
         'key-manager' = @('run_windows.bat')
+        'script-editor' = @('Run-Script-Editor.bat', 'Launch-SE.ps1', 'Script-Web.ps1')
     }
     Install-ToolRelease $store $tool $offer {
         foreach ($file in @('Standalone-Update.ps1', 'Tool-Updates.ps1') + $launcher[$tool.Id]) {
