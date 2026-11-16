@@ -660,8 +660,12 @@ function Route-Request($req, $ctx) {
     switch ($path) {
         '/api/standalone-update' {
             if ($req.Method -ne 'POST') { Send-Text $ctx 405 'Method Not Allowed'; return }
-            if ($ParentPid -gt 0) { Send-Text $ctx 403 '請從 Hub 更新工具。'; return }
             $body = Read-JsonBody $req
+            if ($ParentPid -gt 0) {
+                # 由 Hub 啟動：檢查時回報「由 Hub 管理、沒有獨立更新」，不回 403 以免瀏覽器記錄錯誤；開啟更新仍拒絕
+                if ($body.action -eq 'check') { Send-JsonRaw $ctx @{ ok = $true; update = $null; managed = $true }; return }
+                Send-Text $ctx 403 '請從 Hub 更新工具。'; return
+            }
             $updater = Join-Path $PSScriptRoot 'Standalone-Update.ps1'
             if ($body.action -eq 'check') {
                 $result = & $updater -Action Check | ConvertFrom-Json
@@ -690,6 +694,13 @@ function Route-Request($req, $ctx) {
 
         '/api/info' {
             Send-JsonRaw $ctx ([pscustomobject]@{ ok = $true; tool = $script:ToolInfo; dataDir = $script:DataDir })
+            return
+        }
+        '/api/shutdown' {
+            # Hub 停止工具時先請工具自己結束（回應送出後主迴圈結束並關閉監聽），沒有這條 Hub 會等 5 秒後強制結束
+            if ($req.Method -ne 'POST') { Send-Text $ctx 405 'Method Not Allowed'; return }
+            $script:ShutdownRequested = $true
+            Send-JsonRaw $ctx ([pscustomobject]@{ ok = $true; result = [pscustomobject]@{ closing = $true } })
             return
         }
 
@@ -1402,6 +1413,7 @@ if ($ParentPid -gt 0) {
     catch { Write-Host "父行程 $ParentPid 不存在，結束。" -ForegroundColor Red; $listener.Stop(); exit 1 }
 }
 $script:NextParentCheck = Get-Date
+$script:ShutdownRequested = $false
 
 Read-JobHistory
 if ($script:History.Count -gt 0) {
@@ -1431,6 +1443,7 @@ try {
             try { $hctx = $listener.EndGetContext($script:PendingCtx) } catch { }
             $script:PendingCtx = $null
             if ($hctx) { Handle-Client $hctx }
+            if ($script:ShutdownRequested) { Write-Host '收到關閉要求，結束。' -ForegroundColor Gray; break }
         }
         elseif ((Get-ActiveJob)) {
             Invoke-JobStep (Get-ActiveJob)
